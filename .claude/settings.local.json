@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(SESSION=\"eyJhbGciOiJIUzI1NiJ9.eyJvcGVuSWQiOiI1ZmU5M2ZkMzBkODllYzljOWQ4NmQyMzY4ZTljNDA2NjIwMWRmNTA5MjBlNzI5MjE5NGI4NTM2NDE0NjA5OWNhIiwibmFtZSI6IkFkbWluIiwiaWF0IjoxNzc0NjU1MDUxLCJleHAiOjE4MDYxOTEwNTF9._lVum4sgQKoYlUeaUnAbcSSc8GcOTC1SaBV9vbJTZFA\")",
+      "Bash(pkill -f \"tsx watch server/_core/index.ts\")",
+      "Bash(ffmpeg -version)"
+    ]
+  }
+}

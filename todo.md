@@ -1,0 +1,53 @@
+# AdMod Platform TODO
+
+- [x] Database schema design and migration (ads, policies, reviews, analytics tables)
+- [x] Multi-format ad upload system (video, image, audio, text) with metadata extraction
+- [x] AI-powered automated screening engine with content analysis and policy violation detection
+- [x] Brand safety scoring system
+- [x] Fraud detection integration
+- [x] Moderator dashboard with queue management
+- [x] Priority-based review queues
+- [x] Escalation workflows
+- [x] Annotation and commenting tools
+- [x] Configurable policy engine with rule builder
+- [x] Industry compliance templates (FCC, FTC, GDPR, CCPA)
+- [x] Brand safety verification with advertiser verification
+- [x] Content-context matching and category blocking
+- [x] Analytics dashboard with real-time moderation metrics
+- [x] SLA tracking
+- [x] Moderator performance metrics
+- [x] Compliance reporting
+- [x] Agentic workflow automation with AI agents
+- [x] Configurable human-in-the-loop for edge cases
+- [x] Multi-step approval chain system
+- [x] Role-based access control (reviewer, moderator, admin)
+- [x] Real-time notification system for violations, escalations, approvals
+- [x] Integration API layer for external platforms
+- [x] Professional enterprise UI theme and layout
+- [x] DashboardLayout with sidebar navigation
+- [x] Landing/login page
+- [x] Vitest tests (26 tests passing)
+- [x] Fix: Sign-in flow not working - clicking protected routes shows login but doesn't complete auth
+- [x] Fix: Ensure Manus OAuth login redirect works correctly and session persists
+- [x] Support YouTube URLs as video source in ad submissions
+- [x] Support Vimeo URLs as video source in ad submissions
+- [x] Extract metadata (title, thumbnail, duration) from YouTube/Vimeo URLs
+- [x] Display video embed/preview for YouTube/Vimeo ads in ad detail page
+- [x] AI moderation support for YouTube/Vimeo video content
+- [x] Update NewAd form with URL input option alongside file upload
+- [x] Frame-by-frame video analysis engine using AI vision
+- [x] Frame extraction from uploaded videos and YouTube/Vimeo URLs
+- [x] Per-frame policy violation detection with exact timestamp identification
+- [x] Database schema for frame analysis results (flagged frames, timestamps, issues)
+- [x] Frame timeline viewer UI in ad detail page showing flagged frames
+- [x] Visual indicators for problematic frames with severity and violation type
+- [x] Fix: Frame analysis defaults to 1-second intervals (was 10s); per-second findings for uploaded video
+- [x] Fix: YouTube frame extraction expanded from 4 to 8 base thumbnails + per-second synthetic timestamps
+- [x] Add FCC compliance guidelines as built-in analysis criteria (server/complianceFrameworks.ts)
+- [x] Add IAB advertising guidelines as built-in analysis criteria (server/complianceFrameworks.ts)
+- [x] Add structured compliance scoring — 5 FCC categories + 6 IAB categories with weighted scoring
+- [x] Update AI screening to assess against FCC/FTC/IAB rules by default with structured output
+- [x] Update frame analysis to produce per-second findings referencing FCC/IAB rule IDs
+- [x] Update frontend to display compliance category scores and FCC/IAB findings
+- [x] Add seedTemplates API endpoint for built-in FCC/IAB policy templates
+- [x] Add ComplianceCategoryCard expandable component with rule-level findings display
