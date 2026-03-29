@@ -25,7 +25,7 @@ export default function AdDetail() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
 
-  // Poll while AI screening or frame analysis is running
+  // Poll while AI review is running (status=ai_screening) or frame analysis is extracting
   const { data: ad, isLoading } = trpc.ads.getById.useQuery(
     { id: adId },
     { refetchInterval: (data: any) => data?.status === "ai_screening" ? 2500 : false }
@@ -41,21 +41,14 @@ export default function AdDetail() {
   );
   const playableUrl = ((ad?.sourceType === "upload" && signedUrlData?.url) ? signedUrlData.url : ad?.fileUrl) ?? undefined;
 
-  const runAi = trpc.ads.runAiScreening.useMutation({
+  const runAiReview = trpc.ads.runAiReview.useMutation({
     onSuccess: () => {
       utils.ads.getById.invalidate({ id: adId });
-      toast.info("AI screening started — results will appear automatically");
-    },
-    onError: (e) => toast.error(`AI screening failed: ${e.message}`),
-  });
-  const runFrameAnalysis = trpc.ads.runFrameAnalysis.useMutation({
-    onSuccess: () => {
       utils.ads.getFrameAnalysis.invalidate({ adId });
-      toast.info("Frame analysis started — this may take a few minutes for long videos");
+      toast.info("AI Review started — results will appear automatically");
     },
-    onError: (e) => toast.error(`Frame analysis failed: ${e.message}`),
+    onError: (e) => toast.error(`AI Review failed: ${e.message}`),
   });
-  const getAiSuggestion = trpc.ads.getAiSuggestion.useMutation();
   const submitReview = trpc.reviews.submit.useMutation({
     onSuccess: () => { utils.ads.getById.invalidate({ id: adId }); toast.success("Review submitted"); },
     onError: (e) => toast.error(e.message),
@@ -65,7 +58,6 @@ export default function AdDetail() {
   });
 
   const [reviewComment, setReviewComment] = useState("");
-  const [aiSuggestion, setAiSuggestion] = useState("");
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
 
   if (isLoading) {
@@ -88,12 +80,8 @@ export default function AdDetail() {
 
   const aiAnalysis = ad.aiAnalysis as any;
   const aiAnalysisError = aiAnalysis?.error === true ? (aiAnalysis.errorMessage as string | undefined) : null;
+  const reviewStage: string | undefined = ad.status === "ai_screening" ? aiAnalysis?.reviewStage : undefined;
   const FormatIcon = { video: Video, image: Image, audio: Music, text: Type, rich_media: FileText }[ad.format] || FileText;
-
-  const handleGetSuggestion = async () => {
-    const result = await getAiSuggestion.mutateAsync({ adId });
-    setAiSuggestion(result.suggestion);
-  };
 
   const handleReview = (decision: "approve" | "reject" | "request_changes" | "escalate") => {
     submitReview.mutate({ adSubmissionId: adId, decision, comments: reviewComment });
@@ -139,16 +127,25 @@ export default function AdDetail() {
             {(ad as any).videoDuration ? ` · Duration: ${(ad as any).videoDuration}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
-          {canRunFrameAnalysis && (
-            <Button variant="outline" size="sm" onClick={() => runFrameAnalysis.mutate({ adId })} disabled={runFrameAnalysis.isPending}>
-              {runFrameAnalysis.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Film className="h-4 w-4 mr-1.5" />}
-              Frame Analysis
-            </Button>
+        <div className="flex items-center gap-2">
+          {reviewStage && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2.5 py-1.5 bg-background">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              {reviewStage === "stage1_running" && "Stage 1: Scanning…"}
+              {reviewStage === "stage2_running" && "Stage 2: Deep analysis…"}
+              {reviewStage === "stage3_running" && "Stage 3: Generating report…"}
+            </div>
           )}
-          <Button variant="outline" size="sm" onClick={() => runAi.mutate({ adId })} disabled={runAi.isPending}>
-            {runAi.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Bot className="h-4 w-4 mr-1.5" />}
-            AI Screening
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runAiReview.mutate({ adId })}
+            disabled={runAiReview.isPending || ad.status === "ai_screening"}
+          >
+            {ad.status === "ai_screening" || runAiReview.isPending
+              ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+              : <Zap className="h-4 w-4 mr-1.5" />}
+            Run AI Review
           </Button>
         </div>
       </div>
@@ -289,12 +286,10 @@ export default function AdDetail() {
                           <p className="text-sm text-muted-foreground mb-3">
                             {frameAnalysis.summary || "The analysis encountered an error. Check server logs for details."}
                           </p>
-                          {canRunFrameAnalysis && (
-                            <Button size="sm" variant="outline" onClick={() => runFrameAnalysis.mutate({ adId })} disabled={runFrameAnalysis.isPending}>
-                              {runFrameAnalysis.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Film className="h-3.5 w-3.5 mr-1.5" />}
-                              Retry
+                          <Button size="sm" variant="outline" onClick={() => runAiReview.mutate({ adId })} disabled={runAiReview.isPending}>
+                              {runAiReview.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                              Run AI Review
                             </Button>
-                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -312,8 +307,8 @@ export default function AdDetail() {
                               {frameAnalysis.status}
                             </Badge>
                           </div>
-                          <Button variant="outline" size="sm" onClick={() => runFrameAnalysis.mutate({ adId })} disabled={runFrameAnalysis.isPending}>
-                            {runFrameAnalysis.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Film className="h-3.5 w-3.5 mr-1" />}
+                          <Button variant="outline" size="sm" onClick={() => runAiReview.mutate({ adId })} disabled={runAiReview.isPending}>
+                            {runAiReview.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Zap className="h-3.5 w-3.5 mr-1" />}
                             Re-analyze
                           </Button>
                         </div>
@@ -537,9 +532,9 @@ export default function AdDetail() {
                           : "Frame analysis is available for video and image content."}
                       </p>
                       {canRunFrameAnalysis && (
-                        <Button onClick={() => runFrameAnalysis.mutate({ adId })} disabled={runFrameAnalysis.isPending}>
-                          {runFrameAnalysis.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Film className="h-4 w-4 mr-2" />}
-                          Run Frame Analysis
+                        <Button onClick={() => runAiReview.mutate({ adId })} disabled={runAiReview.isPending}>
+                          {runAiReview.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+                          Run AI Review
                         </Button>
                       )}
                     </CardContent>
@@ -557,10 +552,35 @@ export default function AdDetail() {
                     {ad.status === "ai_screening" ? (
                     <div className="py-8 text-center">
                       <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-3" />
-                      <h3 className="font-semibold mb-1">AI Screening In Progress</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Analyzing content against FCC and IAB guidelines. Results will appear automatically.
-                      </p>
+                      <h3 className="font-semibold mb-1">AI Review In Progress</h3>
+                      {(() => {
+                        const stages = ["stage1_running", "stage2_running", "stage3_running"];
+                        const labels = ["Stage 1: Quick Scan", "Stage 2: Deep Analysis", "Stage 3: Generating Report"];
+                        const descs = [
+                          "Extracting keyframes and scanning for issues…",
+                          "Running FCC/IAB compliance checks on flagged content…",
+                          "Synthesizing findings and recommendation…",
+                        ];
+                        const idx = stages.indexOf(reviewStage ?? "");
+                        const activeDesc = idx >= 0 ? descs[idx] : descs[0];
+                        return (
+                          <>
+                            <p className="text-xs text-muted-foreground mb-3">{activeDesc}</p>
+                            <div className="flex justify-center gap-3 text-xs">
+                              {stages.map((s, i) => {
+                                const past = idx > i;
+                                const active = idx === i;
+                                return (
+                                  <div key={s} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${active ? "border-primary text-primary bg-primary/5" : past ? "border-green-500/50 text-green-400" : "border-border text-muted-foreground"}`}>
+                                    {past ? <CircleCheck className="h-3 w-3" /> : active ? <Loader2 className="h-3 w-3 animate-spin" /> : <div className="h-3 w-3 rounded-full border border-current opacity-40" />}
+                                    {labels[i]}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ) : aiAnalysisError ? (
                     <div className="py-8 text-center">
@@ -574,16 +594,98 @@ export default function AdDetail() {
                       <p className="text-xs font-mono bg-muted rounded px-3 py-2 text-left max-w-lg mx-auto break-all">
                         {aiAnalysisError}
                       </p>
-                      <button
-                        className="mt-4 text-sm underline text-primary"
-                        onClick={() => runAi.mutate({ adId })}
-                        disabled={runAi.isPending}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => runAiReview.mutate({ adId })}
+                        disabled={runAiReview.isPending}
                       >
-                        {runAi.isPending ? "Retrying…" : "Retry AI Screening"}
-                      </button>
+                        {runAiReview.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                        Retry AI Review
+                      </Button>
                     </div>
                   ) : aiAnalysis ? (
                       <div className="space-y-4">
+                        {/* Moderator Brief — auto-generated in Stage 3 */}
+                        {aiAnalysis.moderatorBrief && (
+                          <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <Bot className="h-4 w-4 text-primary" />
+                              <span className="text-[11px] uppercase tracking-wider text-primary font-semibold">Moderator Brief</span>
+                              {aiAnalysis.deepAnalysisTriggered === false && (
+                                <Badge variant="outline" className="text-[10px] border-green-500/40 text-green-400">Quick scan only</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm leading-relaxed">{aiAnalysis.moderatorBrief}</p>
+                          </div>
+                        )}
+                        {/* AI Agent Decision — routing reasoning */}
+                        {aiAnalysis.routingDecision && (
+                          <div className={`p-3 rounded-lg border ${
+                            aiAnalysis.routingDecision === "auto_approve"
+                              ? "bg-green-500/5 border-green-500/20"
+                              : aiAnalysis.routingDecision === "auto_reject"
+                              ? "bg-red-500/5 border-red-500/20"
+                              : "bg-yellow-500/5 border-yellow-500/20"
+                          }`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Zap className={`h-4 w-4 ${
+                                  aiAnalysis.routingDecision === "auto_approve" ? "text-green-400" :
+                                  aiAnalysis.routingDecision === "auto_reject" ? "text-red-400" :
+                                  "text-yellow-400"
+                                }`} />
+                                <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">AI Agent Decision</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="outline" className={`text-[10px] ${
+                                  aiAnalysis.routingDecision === "auto_approve" ? "border-green-500/40 text-green-400" :
+                                  aiAnalysis.routingDecision === "auto_reject" ? "border-red-500/40 text-red-400" :
+                                  "border-yellow-500/40 text-yellow-400"
+                                }`}>
+                                  {aiAnalysis.routingDecision.replace(/_/g, " ")}
+                                </Badge>
+                                {aiAnalysis.skippedDeepAnalysis && (
+                                  <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400">Quick scan only</Badge>
+                                )}
+                              </div>
+                            </div>
+                            {/* Confidence bar */}
+                            <div className="mb-2">
+                              <div className="flex justify-between mb-1">
+                                <span className="text-[10px] text-muted-foreground">Confidence</span>
+                                <span className={`text-[10px] font-bold ${
+                                  (aiAnalysis.routingConfidence ?? 0) >= 85 ? "text-green-400" :
+                                  (aiAnalysis.routingConfidence ?? 0) >= 60 ? "text-yellow-400" :
+                                  "text-red-400"
+                                }`}>{aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}%</span>
+                              </div>
+                              <Progress
+                                value={aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}
+                                className="h-1.5"
+                              />
+                            </div>
+                            {/* Stages completed */}
+                            {aiAnalysis.stagesCompleted?.length > 0 && (
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <span className="text-[10px] text-muted-foreground">Stages:</span>
+                                {[1, 2, 3].map(s => (
+                                  <span key={s} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                    aiAnalysis.stagesCompleted.includes(s)
+                                      ? "bg-primary/15 text-primary"
+                                      : "bg-muted text-muted-foreground opacity-40"
+                                  }`}>S{s}</span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Routing reason */}
+                            {aiAnalysis.routingReason && (
+                              <p className="text-xs text-muted-foreground leading-relaxed">{aiAnalysis.routingReason}</p>
+                            )}
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-3 gap-3">
                           <ScoreCard label="Overall Score" score={ad.aiScore ?? 0} />
                           <ScoreCard label="Brand Safety" score={ad.brandSafetyScore ?? 0} />
@@ -1107,6 +1209,74 @@ export default function AdDetail() {
 
         {/* Sidebar */}
         <div className="space-y-4">
+          {/* Approval Chain Progress */}
+          {ad.approvalSteps && (ad.approvalSteps as any[]).length > 0 && (() => {
+            const steps = ad.approvalSteps as any[];
+            const current = (ad as any).currentApprovalStep ?? 0;
+            const total = steps.length;
+            const currentStepObj = steps.find((s: any) => s.stepNumber === current);
+            return (
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-primary" />
+                    Approval Chain
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {current > 0 && currentStepObj && (
+                    <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-xs">
+                      <span className="font-semibold">
+                        Step {current} of {total}: {currentStepObj.stepName}
+                      </span>
+                      <span className="text-muted-foreground ml-1.5">
+                        ({currentStepObj.requiredRole})
+                      </span>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {steps.map((step: any) => {
+                      const isPast = step.status === "approved" || step.status === "rejected";
+                      const isActive = step.stepNumber === current && step.status === "pending";
+                      return (
+                        <div key={step.id} className="flex items-start gap-2.5">
+                          <div className={`mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            step.status === "approved" ? "bg-green-500/20 text-green-400" :
+                            step.status === "rejected" ? "bg-red-500/20 text-red-400" :
+                            isActive ? "bg-primary/20 text-primary ring-1 ring-primary/40" :
+                            "bg-muted text-muted-foreground"
+                          }`}>
+                            {step.status === "approved" ? <CircleCheck className="h-3 w-3" /> :
+                             step.status === "rejected" ? <XCircle className="h-3 w-3" /> :
+                             step.stepNumber}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-xs font-medium ${isActive ? "text-primary" : ""}`}>
+                                {step.stepName || `Step ${step.stepNumber}`}
+                              </span>
+                              <Badge variant="outline" className="text-[9px] py-0">{step.requiredRole}</Badge>
+                            </div>
+                            {isPast && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {step.status === "approved" ? "Approved" : "Rejected"}
+                                {step.decidedByEmail ? ` by ${step.decidedByEmail}` : ""}
+                                {step.decidedAt ? ` on ${new Date(step.decidedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                              </p>
+                            )}
+                            {isActive && (
+                              <p className="text-[11px] text-primary/70 mt-0.5">Awaiting review</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Review Panel */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
@@ -1136,23 +1306,21 @@ export default function AdDetail() {
             </CardContent>
           </Card>
 
-          {/* AI Assistant */}
+          {/* AI Assistant — moderator brief auto-generated by Run AI Review */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" />
-                AI Assistant
+                Moderator Brief
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Button size="sm" variant="outline" className="w-full" onClick={handleGetSuggestion} disabled={getAiSuggestion.isPending}>
-                {getAiSuggestion.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Bot className="h-3.5 w-3.5 mr-1.5" />}
-                Get AI Suggestion
-              </Button>
-              {aiSuggestion && (
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <p className="text-sm">{aiSuggestion}</p>
-                </div>
+            <CardContent>
+              {aiAnalysis?.moderatorBrief ? (
+                <p className="text-sm leading-relaxed">{aiAnalysis.moderatorBrief}</p>
+              ) : ad.status === "ai_screening" ? (
+                <p className="text-sm text-muted-foreground">Generating…</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Run AI Review to generate a moderator brief.</p>
               )}
             </CardContent>
           </Card>
@@ -1288,6 +1456,7 @@ function StatusBadge({ status }: { status: string }) {
     draft: "bg-muted text-muted-foreground",
     submitted: "bg-blue-500/15 text-blue-400",
     ai_screening: "bg-purple-500/15 text-purple-400",
+    ai_failed: "bg-red-500/15 text-red-400",
     in_review: "bg-yellow-500/15 text-yellow-400",
     escalated: "bg-orange-500/15 text-orange-400",
     approved: "bg-green-500/15 text-green-400",

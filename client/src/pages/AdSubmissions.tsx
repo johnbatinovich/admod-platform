@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, Search, Filter, Image, Video, Music, Type, Plus, Box, Youtube, Link2 } from "lucide-react";
+import { FileText, Search, Filter, Image, Video, Music, Type, Plus, Box, Youtube, Link2, Bot, Clock } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 
@@ -13,6 +13,7 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   submitted: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   ai_screening: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  ai_failed: "bg-red-500/15 text-red-400 border-red-500/30",
   in_review: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
   escalated: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   changes_requested: "bg-amber-500/15 text-amber-400 border-amber-500/30",
@@ -31,6 +32,7 @@ export default function AdSubmissions() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formatFilter, setFormatFilter] = useState("all");
+  const [aiDecisionFilter, setAiDecisionFilter] = useState("all");
 
   const filters = useMemo(() => ({
     search: search || undefined,
@@ -38,7 +40,19 @@ export default function AdSubmissions() {
     format: formatFilter !== "all" ? formatFilter : undefined,
   }), [search, statusFilter, formatFilter]);
 
-  const { data: ads, isLoading } = trpc.ads.list.useQuery(filters);
+  const { data: rawAds, isLoading } = trpc.ads.list.useQuery(filters);
+
+  const ads = useMemo(() => {
+    if (!rawAds || aiDecisionFilter === "all") return rawAds;
+    return rawAds.filter(ad => {
+      const decision = (ad.aiAnalysis as any)?.routingDecision;
+      if (aiDecisionFilter === "auto_approve") return decision === "auto_approve";
+      if (aiDecisionFilter === "auto_reject") return decision === "auto_reject";
+      if (aiDecisionFilter === "needs_review") return decision === "needs_review";
+      if (aiDecisionFilter === "pending") return !decision;
+      return true;
+    });
+  }, [rawAds, aiDecisionFilter]);
 
   return (
     <div className="space-y-4">
@@ -94,6 +108,19 @@ export default function AdSubmissions() {
                 <SelectItem value="rich_media">Rich Media</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={aiDecisionFilter} onValueChange={setAiDecisionFilter}>
+              <SelectTrigger className="w-[155px] h-9 text-sm bg-background">
+                <Bot className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
+                <SelectValue placeholder="AI Decision" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All AI Decisions</SelectItem>
+                <SelectItem value="auto_approve">Auto-Approved</SelectItem>
+                <SelectItem value="needs_review">Routed to Review</SelectItem>
+                <SelectItem value="auto_reject">Auto-Rejected</SelectItem>
+                <SelectItem value="pending">Pending AI</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -129,8 +156,19 @@ export default function AdSubmissions() {
                       >
                         <td className="p-3">
                           <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                              <FormatIcon className="h-4 w-4 text-primary" />
+                            <div className="relative">
+                              <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                                <FormatIcon className="h-4 w-4 text-primary" />
+                              </div>
+                              {(ad.aiAnalysis as any)?.routingDecision ? (
+                                <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-purple-500/20 border border-background flex items-center justify-center">
+                                  <Bot className="h-2 w-2 text-purple-400" />
+                                </div>
+                              ) : (ad.status === "submitted" || ad.status === "draft") ? (
+                                <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-muted border border-background flex items-center justify-center">
+                                  <Clock className="h-2 w-2 text-muted-foreground" />
+                                </div>
+                              ) : null}
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-medium truncate max-w-[250px]">{ad.title}</p>
@@ -161,11 +199,21 @@ export default function AdSubmissions() {
                           <PriorityBadge priority={ad.priority} />
                         </td>
                         <td className="p-3">
-                          {ad.aiScore !== null ? (
-                            <ScoreBadge score={ad.aiScore} />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              {ad.aiScore !== null ? (
+                                <ScoreBadge score={ad.aiScore} />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                              {(ad.aiAnalysis as any)?.confidence !== undefined && (
+                                <span className="text-[10px] text-muted-foreground">({(ad.aiAnalysis as any).confidence}%)</span>
+                              )}
+                            </div>
+                            {(ad.aiAnalysis as any)?.routingDecision && (
+                              <RoutingBadge decision={(ad.aiAnalysis as any).routingDecision} />
+                            )}
+                          </div>
                         </td>
                         <td className="p-3">
                           <span className="text-xs text-muted-foreground">
@@ -204,4 +252,22 @@ function PriorityBadge({ priority }: { priority: string }) {
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 80 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
   return <span className={`text-xs font-bold ${color}`}>{score}/100</span>;
+}
+
+function RoutingBadge({ decision }: { decision: string }) {
+  const styles: Record<string, string> = {
+    auto_approve: "text-green-400",
+    auto_reject: "text-red-400",
+    needs_review: "text-yellow-400",
+  };
+  const labels: Record<string, string> = {
+    auto_approve: "auto approved",
+    auto_reject: "auto rejected",
+    needs_review: "human review",
+  };
+  return (
+    <span className={`text-[10px] font-medium ${styles[decision] ?? "text-muted-foreground"}`}>
+      {labels[decision] ?? decision.replace(/_/g, " ")}
+    </span>
+  );
 }
