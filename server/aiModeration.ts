@@ -593,7 +593,7 @@ Provide your complete analysis as a JSON object.`;
     console.log(`[AiModeration] Parsed response: overallScore=${parsed.overallScore} brandSafety=${parsed.brandSafetyScore} recommendation=${parsed.recommendation} complianceScores=${parsed.complianceScores?.length ?? 0}`);
 
     // Reconcile compliance scores so findings always drive score/status
-    const reconciledScores = reconcileComplianceScores(parsed.complianceScores || []);
+    const reconciledScores = reconcileComplianceScores(parsed.complianceScores || []) as ComplianceCategoryScore[];
     const fccCategories = reconciledScores.filter((c: any) => c.framework === "FCC");
     const iabCategories = reconciledScores.filter((c: any) => c.framework === "IAB");
     const overallFccScore = fccCategories.length > 0

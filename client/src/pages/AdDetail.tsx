@@ -39,7 +39,7 @@ export default function AdDetail() {
     { fileKey: ad?.fileKey ?? "" },
     { enabled: !!(ad?.fileKey && ad?.sourceType === "upload"), staleTime: 50 * 60 * 1000 }
   );
-  const playableUrl = (ad?.sourceType === "upload" && signedUrlData?.url) ? signedUrlData.url : ad?.fileUrl;
+  const playableUrl = ((ad?.sourceType === "upload" && signedUrlData?.url) ? signedUrlData.url : ad?.fileUrl) ?? undefined;
 
   const runAi = trpc.ads.runAiScreening.useMutation({
     onSuccess: () => {

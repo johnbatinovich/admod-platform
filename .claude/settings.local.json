@@ -7,7 +7,9 @@
       "Bash(ffmpeg -version)",
       "Bash(node -e \"const p = require\\(''./package.json''\\); console.log\\(JSON.stringify\\(Object.keys\\(p.dependencies\\).filter\\(k => k.includes\\(''mysql''\\)\\)\\)\\)\")",
       "Bash(node -e \":*)",
-      "Bash(pnpm remove:*)"
+      "Bash(pnpm remove:*)",
+      "Bash(git:*)",
+      "Bash(pnpm run:*)"
     ]
   }
 }
