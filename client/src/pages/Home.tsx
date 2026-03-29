@@ -4,18 +4,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   FileText, CheckCircle, XCircle, AlertTriangle, BarChart3,
-  ArrowRight, Bot, Shield, Clock, TrendingUp
+  ArrowRight, Bot, Shield, Clock, TrendingUp, Sparkles, Loader2, Zap
 } from "lucide-react";
+import { useState } from "react";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
 
 export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const [showDemoDialog, setShowDemoDialog] = useState(false);
+  const utils = trpc.useUtils();
   const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
   const { data: adCounts } = trpc.dashboard.adCounts.useQuery();
   const { data: recentActivity } = trpc.dashboard.recentActivity.useQuery();
+  const { data: agentActivity } = trpc.dashboard.agentActivity.useQuery();
+  const { data: autoStats } = trpc.dashboard.autoStats.useQuery();
+
+  const seedDemo = trpc.ads.seedDemoData.useMutation({
+    onSuccess: (data) => {
+      setShowDemoDialog(false);
+      utils.dashboard.stats.invalidate();
+      utils.dashboard.adCounts.invalidate();
+      utils.dashboard.recentActivity.invalidate();
+      utils.dashboard.agentActivity.invalidate();
+      utils.dashboard.autoStats.invalidate();
+      toast.success(`Demo data loaded — ${data.count} sample ads created`);
+    },
+    onError: (e) => toast.error(`Failed to load demo data: ${e.message}`),
+  });
+
+  const isAdmin = (user as any)?.platformRole === "admin" || (user as any)?.role === "admin";
 
   const statCards = [
     { label: "Total Ads", value: stats?.totalAds ?? 0, icon: FileText, color: "text-primary" },
@@ -37,6 +59,12 @@ export default function Home() {
           </p>
         </div>
         <div className="flex gap-2">
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={() => setShowDemoDialog(true)}>
+              <Sparkles className="h-4 w-4 mr-1.5" />
+              Load Demo Data
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setLocation("/review")}>
             <Shield className="h-4 w-4 mr-1.5" />
             Review Queue
@@ -46,6 +74,40 @@ export default function Home() {
             Submit Ad
           </Button>
         </div>
+
+        <Dialog open={showDemoDialog} onOpenChange={setShowDemoDialog}>
+          <DialogContent className="bg-card max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Load Demo Data
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                This will populate the platform with <strong>8 sample ads</strong> in various states — approved, in review, and rejected — along with realistic AI analysis results, policy violations, and approval chain progress.
+              </p>
+              <div className="rounded-lg bg-muted/50 border border-border p-3 text-xs space-y-1 text-muted-foreground">
+                <p>• Summer Beach Getaway — auto-approved, score 95</p>
+                <p>• Bud Light Game Day — in review (alcohol age-gating)</p>
+                <p>• Pfizer Xeljanz DTC — in review (fair balance)</p>
+                <p>• DraftKings Bonus Offer — rejected (blocking violations)</p>
+                <p>• Toyota RAV4 Adventure — auto-approved, score 97</p>
+                <p>• Campaign for Change PAC — in review (disclosure)</p>
+                <p>• Juul Vaping Lifestyle — auto-rejected (tobacco ban)</p>
+                <p>• Disney+ Streaming Promo — pending analysis</p>
+              </div>
+              <p className="text-xs text-muted-foreground">Compliance policy templates and the default approval chain will also be seeded if not already present.</p>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowDemoDialog(false)}>Cancel</Button>
+                <Button size="sm" onClick={() => seedDemo.mutate()} disabled={seedDemo.isPending}>
+                  {seedDemo.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
+                  Load Demo Data
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats Grid */}
@@ -70,6 +132,33 @@ export default function Home() {
           </Card>
         ))}
       </div>
+
+      {/* Agent Automation Stats */}
+      <Card className="bg-card border-border border-purple-500/20">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-6 w-6 rounded bg-purple-500/15 flex items-center justify-center">
+              <Zap className="h-3.5 w-3.5 text-purple-400" />
+            </div>
+            <span className="text-sm font-semibold">AI Agent — Last 7 Days</span>
+            <span className="text-[11px] text-muted-foreground ml-1">automation summary</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 text-center">
+              <p className="text-2xl font-bold text-green-400">{autoStats?.autoApproved ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Auto-Approved</p>
+            </div>
+            <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 p-3 text-center">
+              <p className="text-2xl font-bold text-yellow-400">{autoStats?.flaggedForReview ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Flagged for Review</p>
+            </div>
+            <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 text-center">
+              <p className="text-2xl font-bold text-red-400">{autoStats?.autoRejected ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Auto-Rejected</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-4">
@@ -127,6 +216,66 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Agent Activity Feed */}
+      {agentActivity && agentActivity.length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-5 rounded bg-purple-500/15 flex items-center justify-center">
+                  <Bot className="h-3 w-3 text-purple-400" />
+                </div>
+                <CardTitle className="text-sm font-semibold">Agent Activity Feed</CardTitle>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setLocation("/audit")}>
+                View All <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {agentActivity.map((entry) => {
+                const d = entry.details as any;
+                const decision = d?.routingDecision as string | undefined;
+                const confidence = d?.routingConfidence as number | undefined;
+                const decisionStyle =
+                  decision === "auto_approve" ? { badge: "bg-green-500/10 text-green-400 border-green-500/30", label: "Auto-Approved" } :
+                  decision === "auto_reject"  ? { badge: "bg-red-500/10 text-red-400 border-red-500/30", label: "Auto-Rejected" } :
+                                                { badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30", label: "Flagged for Review" };
+                return (
+                  <div key={entry.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                    <div className="flex items-center gap-3">
+                      <div className="h-7 w-7 rounded-md bg-purple-500/10 flex items-center justify-center shrink-0">
+                        <Zap className="h-3.5 w-3.5 text-purple-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm truncate max-w-[220px]">{entry.adTitle ?? `Ad #${entry.entityId}`}</p>
+                        {d?.routingReason && (
+                          <p className="text-[11px] text-muted-foreground truncate max-w-[220px]">{d.routingReason}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {confidence !== undefined && (
+                        <span className="text-[11px] text-muted-foreground">{confidence}%</span>
+                      )}
+                      {decision && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${decisionStyle.badge}`}>
+                          {decisionStyle.label}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-muted-foreground">
+                        {new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Activity */}
       <Card className="bg-card border-border">

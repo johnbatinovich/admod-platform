@@ -7,20 +7,38 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Upload, Loader2, FileText, Link2, Youtube, Video, CheckCircle, ExternalLink } from "lucide-react";
-import { useState, useRef } from "react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, Upload, Loader2, FileText, Link2, Youtube, Video, CheckCircle, ExternalLink, X, Layers } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 type SourceTab = "upload" | "url";
+type ModeTab = "single" | "batch";
+
+interface BatchFile {
+  file: File;
+  title: string;
+  format: "video" | "image" | "audio" | "text" | "rich_media";
+  uploadedKey?: string;
+  uploadedUrl?: string;
+  status: "pending" | "uploading" | "ready" | "error";
+}
 
 export default function NewAd() {
   const [, setLocation] = useLocation();
+  const [modeTab, setModeTab] = useState<ModeTab>("single");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [sourceTab, setSourceTab] = useState<SourceTab>("upload");
   const [videoUrl, setVideoUrl] = useState("");
   const [isParsingUrl, setIsParsingUrl] = useState(false);
+
+  // Batch state
+  const [batchFiles, setBatchFiles] = useState<BatchFile[]>([]);
+  const [batchSubmitProgress, setBatchSubmitProgress] = useState<number | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -53,6 +71,13 @@ export default function NewAd() {
     onSuccess: (data) => {
       toast.success("Ad submitted successfully");
       setLocation(`/ads/${data.id}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const createBatch = trpc.ads.createBatch.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.count} ads submitted — AI review starting in the background`);
+      setLocation("/ads");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -219,6 +244,87 @@ export default function NewAd() {
     });
   };
 
+  // ── Batch helpers ─────────────────────────────────────────────────────────
+
+  const formatFromMime = (mime: string): BatchFile["format"] => {
+    if (mime.startsWith("video/")) return "video";
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("audio/")) return "audio";
+    return "rich_media";
+  };
+
+  const titleFromFileName = (name: string) =>
+    name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  const addBatchFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files);
+    const toAdd: BatchFile[] = arr
+      .filter(f => f.size <= 16 * 1024 * 1024)
+      .map(f => ({
+        file: f,
+        title: titleFromFileName(f.name),
+        format: formatFromMime(f.type),
+        status: "pending" as const,
+      }));
+    if (arr.length !== toAdd.length) toast.error("Some files exceeded 16MB and were skipped");
+    setBatchFiles(prev => [...prev, ...toAdd]);
+  }, []);
+
+  const handleBatchDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files.length) addBatchFiles(e.dataTransfer.files);
+  };
+
+  const handleBatchSubmit = async () => {
+    const readyFiles = batchFiles.filter(f => f.status === "pending" || f.status === "ready");
+    if (readyFiles.length === 0) { toast.error("No files to submit"); return; }
+
+    // Upload all files first
+    setBatchSubmitProgress(0);
+    const uploaded: BatchFile[] = [];
+    for (let i = 0; i < batchFiles.length; i++) {
+      const bf = batchFiles[i];
+      setBatchSubmitProgress(Math.round((i / batchFiles.length) * 60));
+      setBatchFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: "uploading" } : f));
+      try {
+        const reader = new FileReader();
+        const base64: string = await new Promise((res, rej) => {
+          reader.onload = () => res((reader.result as string).split(",")[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(bf.file);
+        });
+        const result = await uploadFile.mutateAsync({ fileName: bf.file.name, fileBase64: base64, mimeType: bf.file.type });
+        const updated = { ...bf, uploadedKey: result.key, uploadedUrl: result.url, status: "ready" as const };
+        uploaded.push(updated);
+        setBatchFiles(prev => prev.map((f, idx) => idx === i ? updated : f));
+      } catch {
+        setBatchFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: "error" } : f));
+        toast.error(`Failed to upload ${bf.file.name}`);
+      }
+    }
+
+    setBatchSubmitProgress(70);
+
+    const adsPayload = uploaded.map(bf => ({
+      title: bf.title,
+      format: bf.format,
+      fileUrl: bf.uploadedUrl,
+      fileKey: bf.uploadedKey,
+      fileName: bf.file.name,
+      fileMimeType: bf.file.type,
+      fileSizeBytes: bf.file.size,
+      sourceType: "upload" as const,
+    }));
+
+    if (adsPayload.length === 0) { setBatchSubmitProgress(null); return; }
+    setBatchSubmitProgress(85);
+    createBatch.mutate({ ads: adsPayload });
+    setBatchSubmitProgress(100);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
+
   const hasVideoMetadata = form.sourceType !== "upload" && form.embedUrl;
   const providerLabel = form.videoProvider === "youtube" ? "YouTube" : form.videoProvider === "vimeo" ? "Vimeo" : "Video";
 
@@ -234,6 +340,18 @@ export default function NewAd() {
         </div>
       </div>
 
+      {/* Mode tabs — Single vs Batch */}
+      <Tabs value={modeTab} onValueChange={(v) => setModeTab(v as ModeTab)}>
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="single" className="text-xs gap-1.5">
+            <FileText className="h-3.5 w-3.5" />Single Ad
+          </TabsTrigger>
+          <TabsTrigger value="batch" className="text-xs gap-1.5">
+            <Layers className="h-3.5 w-3.5" />Batch Upload
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="single">
       <Card className="bg-card border-border">
         <CardContent className="p-5 space-y-5">
           <div className="space-y-2">
@@ -473,6 +591,116 @@ export default function NewAd() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* ── Batch Upload Tab ───────────────────────────────────────────────── */}
+        <TabsContent value="batch">
+          <Card className="bg-card border-border">
+            <CardContent className="p-5 space-y-5">
+              <div>
+                <h2 className="text-sm font-semibold mb-0.5">Batch Upload</h2>
+                <p className="text-xs text-muted-foreground">Drop multiple files at once. Each ad is auto-titled from the filename. AI review runs sequentially after submission.</p>
+              </div>
+
+              {/* Drop zone */}
+              <input
+                ref={batchInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                accept="image/*,video/*,audio/*"
+                onChange={e => { if (e.target.files) addBatchFiles(e.target.files); e.target.value = ""; }}
+              />
+              <div
+                onDragOver={e => { e.preventDefault(); setIsDraggingOver(true); }}
+                onDragLeave={() => setIsDraggingOver(false)}
+                onDrop={handleBatchDrop}
+                onClick={() => batchInputRef.current?.click()}
+                className={`w-full p-10 rounded-lg border-2 border-dashed transition-colors cursor-pointer text-center ${
+                  isDraggingOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                }`}
+              >
+                <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {isDraggingOver ? "Drop files here" : "Click or drag files here"}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">Images, video, audio — up to 16MB each, max 20 files</p>
+              </div>
+
+              {/* File list */}
+              {batchFiles.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{batchFiles.length} file{batchFiles.length !== 1 ? "s" : ""} queued</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-[11px] text-destructive" onClick={() => setBatchFiles([])}>Clear all</Button>
+                  </div>
+                  {batchFiles.map((bf, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-background border border-border/50">
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${
+                        bf.status === "ready" ? "bg-green-500" :
+                        bf.status === "uploading" ? "bg-yellow-500 animate-pulse" :
+                        bf.status === "error" ? "bg-red-500" :
+                        "bg-muted-foreground"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <Input
+                          value={bf.title}
+                          onChange={e => setBatchFiles(prev => prev.map((f, idx) => idx === i ? { ...f, title: e.target.value } : f))}
+                          className="h-7 text-xs bg-card border-0 p-0 focus-visible:ring-0 font-medium"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {bf.file.name} · {(bf.file.size / 1024).toFixed(0)} KB · {bf.format}
+                        </p>
+                      </div>
+                      <Select value={bf.format} onValueChange={(v: any) => setBatchFiles(prev => prev.map((f, idx) => idx === i ? { ...f, format: v } : f))}>
+                        <SelectTrigger className="w-[90px] h-7 text-[11px] bg-card">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="video">Video</SelectItem>
+                          <SelectItem value="image">Image</SelectItem>
+                          <SelectItem value="audio">Audio</SelectItem>
+                          <SelectItem value="rich_media">Rich Media</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => setBatchFiles(prev => prev.filter((_, idx) => idx !== i))}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Progress */}
+              {batchSubmitProgress !== null && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>
+                      {batchSubmitProgress < 70 ? `Uploading files…` :
+                       batchSubmitProgress < 100 ? "Submitting to review queue…" :
+                       "Done!"}
+                    </span>
+                    <span>{batchSubmitProgress}%</span>
+                  </div>
+                  <Progress value={batchSubmitProgress} className="h-1.5" />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setLocation("/ads")}>Cancel</Button>
+                <Button
+                  onClick={handleBatchSubmit}
+                  disabled={batchFiles.length === 0 || createBatch.isPending || batchSubmitProgress !== null}
+                >
+                  {(createBatch.isPending || batchSubmitProgress !== null) && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                  Submit {batchFiles.length > 0 ? `${batchFiles.length} Ad${batchFiles.length !== 1 ? "s" : ""}` : "Ads"} for Review
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
