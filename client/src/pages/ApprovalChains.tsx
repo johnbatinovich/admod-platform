@@ -27,7 +27,9 @@ export default function ApprovalChains() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Approval Chains</h1>
-          <p className="text-sm text-muted-foreground mt-1">Configure multi-step approval workflows for ad review.</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+            Define the review stages an ad must pass through before airing. Ads flagged by the AI agent for human review are automatically routed through the default chain. Each stage requires sign-off from the designated role before advancing.
+          </p>
         </div>
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild>
@@ -91,12 +93,23 @@ export default function ApprovalChains() {
           })}
         </div>
       ) : (
-        <Card className="bg-card border-border">
-          <CardContent className="text-center py-12">
-            <ScrollText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">No approval chains configured. Create one to enable multi-step review.</p>
-          </CardContent>
-        </Card>
+        <div className="space-y-3">
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-4">
+              <p className="text-sm leading-relaxed">
+                When the AI agent reviews an ad and recommends human review, it assigns the ad to your default approval chain.
+                Each step in the chain must be approved before the ad is cleared for broadcast.{" "}
+                <span className="font-semibold text-destructive">Rejected at any step = ad rejected.</span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border-border">
+            <CardContent className="text-center py-12">
+              <ScrollText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No approval chains configured. Create one to enable multi-step review.</p>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
