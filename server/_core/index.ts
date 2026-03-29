@@ -108,6 +108,39 @@ async function startServer() {
   registerGoogleOAuthRoutes(app);
   // Bootstrap admin user on first boot
   await bootstrapAdminUser();
+  // Health check
+  app.get("/health", async (_req, res) => {
+    const checks: Record<string, string> = {};
+
+    // Database
+    try {
+      const { getDb } = await import("../db");
+      const db = await getDb();
+      if (db) { checks.database = "ok"; } else { checks.database = "unavailable"; }
+    } catch { checks.database = "error"; }
+
+    // Storage
+    const s3Key = process.env.S3_ACCESS_KEY_ID;
+    const s3Secret = process.env.S3_SECRET_ACCESS_KEY;
+    checks.storage = s3Key && s3Secret ? "configured" : "not_configured";
+
+    // LLM
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    checks.llm = openaiKey || anthropicKey ? "configured" : "not_configured";
+
+    // ffmpeg
+    try {
+      const { exec } = await import("child_process");
+      const { promisify } = await import("util");
+      await promisify(exec)("which ffmpeg");
+      checks.ffmpeg = "ok";
+    } catch { checks.ffmpeg = "not_found"; }
+
+    const allOk = checks.database === "ok";
+    res.status(allOk ? 200 : 503).json({ status: allOk ? "ok" : "degraded", ...checks, timestamp: new Date().toISOString() });
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

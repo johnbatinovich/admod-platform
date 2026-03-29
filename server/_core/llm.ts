@@ -401,12 +401,33 @@ async function invokeAnthropic(params: InvokeParams): Promise<InvokeResult> {
 
 // ─── Main Entry Point ───────────────────────────────────────────────────
 
+function getRetryDelays(error: unknown): number[] {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (/429|rate.?limit|too many requests/i.test(msg)) return [5000, 10000, 20000];
+  if (/50[023]/.test(msg)) return [2000, 5000];
+  if (/timeout|timed out/i.test(msg)) return [3000];
+  return [];
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const provider = getProvider();
   console.log(`[LLM] Invoking ${provider} provider`);
+  const invoke = provider === "anthropic" ? invokeAnthropic : invokeOpenAI;
 
-  if (provider === "anthropic") {
-    return invokeAnthropic(params);
+  let lastErr: unknown;
+  let attempt = 0;
+  while (true) {
+    try {
+      return await invoke(params);
+    } catch (err) {
+      lastErr = err;
+      const delays = getRetryDelays(err);
+      if (attempt >= delays.length) break;
+      const delay = delays[attempt];
+      console.warn(`[LLM] Attempt ${attempt + 1} failed (${(err as Error).message}), retrying in ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      attempt++;
+    }
   }
-  return invokeOpenAI(params);
+  throw lastErr;
 }
