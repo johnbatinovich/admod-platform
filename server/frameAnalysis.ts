@@ -4,6 +4,7 @@ import {
   FCC_FRAMEWORK,
   IAB_FRAMEWORK,
   generateCompliancePrompt,
+  generateCompactCompliancePrompt,
 } from "./complianceFrameworks";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -187,8 +188,8 @@ async function analyzeFrameBatch(
     `- ${p.name} (${p.category}, severity: ${p.severity}): ${JSON.stringify(p.rules)}`
   ).join("\n");
 
-  // Generate FCC/IAB compliance rules for frame-level analysis
-  const compliancePrompt = generateCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
+  // Use the compact prompt for frame analysis — full prompt is reserved for AI screening
+  const compliancePrompt = generateCompactCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
 
   // Fetch all frame images server-side and encode as base64 data URLs.
   // This prevents OpenAI from needing to fetch private R2 URLs (which would 403).
@@ -208,7 +209,7 @@ async function analyzeFrameBatch(
   // Build multimodal message with all successfully-fetched frames
   const imageContents = framesWithData.map(frame => ({
     type: "image_url" as const,
-    image_url: { url: frame.dataUrl, detail: "high" as const },
+    image_url: { url: frame.dataUrl, detail: "low" as const },
   }));
 
   const frameDescriptions = framesWithData.map((f, i) =>
@@ -220,40 +221,11 @@ async function analyzeFrameBatch(
       messages: [
         {
           role: "system",
-          content: `You are an expert video ad moderation AI performing frame-by-frame analysis. You are given ${frames.length} frames extracted from a video advertisement at different timestamps.
-
-For EACH frame, you must analyze against FCC broadcast standards AND IAB digital advertising guidelines:
-
-FCC COMPLIANCE CHECKS:
-1. Obscenity/Indecency — sexually explicit content, nudity, patently offensive material (47 CFR § 73.3999)
-2. Profanity — profane language visible in text overlays or signage
-3. Violence/Gore — graphic violence, blood, disturbing imagery
-4. Subliminal content — hidden messages, single-frame insertions
-5. Tobacco products — any tobacco/e-cigarette branding or imagery (15 U.S.C. § 1335)
-6. Emergency simulation — fake EAS tones, simulated emergency alerts
-7. Disclosure legibility — fine print/disclaimers must be readable, adequate size/contrast/duration
-8. Children's protection — age-inappropriate content in the visual frame
-
-IAB COMPLIANCE CHECKS:
-1. GARM Brand Safety Floor — hate speech, weapons, illegal drugs, terrorism, piracy imagery
-2. Creative quality — fake UI elements, misleading buttons, system notification mimicry
-3. LEAN principles — seizure-inducing flashing (>3Hz), intrusive animation
-4. Truthfulness — misleading before/after imagery, deceptive demonstrations
-5. Photosensitivity — rapid flashing, strobing, high-contrast transitions
-6. Accessibility — text contrast ratios, readability of overlays
-7. Stereotypes — harmful racial, gender, or cultural stereotypes
+          content: `You are a video ad compliance reviewer. Analyze each frame for FCC/IAB policy violations. Flag real issues only — do not invent findings.
 
 ${compliancePrompt}
-
-Active custom policies:
-${policyContext || "Use general advertising standards."}
-
-For each frame, provide:
-- Safety score (0-100, where 100 is perfectly safe)
-- Severity classification
-- Any issues found with SPECIFIC FCC/IAB rule IDs referenced
-- Be precise about WHICH frame has the issue and at WHAT timestamp
-- If a frame is safe, include it with a high score and empty issues array.`
+${policyContext ? `\nCustom policies:\n${policyContext}` : ""}
+For each frame return: score (0–100, higher=safer), severity, brief description, and any issues with rule IDs. Safe frames get score 90–100 and empty issues array.`
         },
         {
           role: "user",
@@ -537,11 +509,27 @@ import {
  * 4. Send real frame images to vision model for FCC/IAB compliance analysis
  * 5. Return per-frame findings with exact timestamps and frame URLs
  */
+/**
+ * Derive a sensible default frame interval from video duration.
+ * - < 60s  → every 5s  (~6 frames for a 30s ad)
+ * - 60-300s → every 10s
+ * - > 300s  → every 15s
+ */
+function defaultIntervalForDuration(durationSeconds: number): number {
+  if (durationSeconds < 60) return 5;
+  if (durationSeconds <= 300) return 10;
+  return 15;
+}
+
 export async function runFrameAnalysis(
   ad: FrameAnalysisRequest,
   policies: Pick<Policy, "name" | "category" | "rules" | "severity">[],
-  intervalSeconds: number = 1
+  intervalSeconds?: number
 ): Promise<FrameAnalysisResult> {
+  // Resolve interval: use caller's override if provided, else derive from duration
+  const durationSeconds = parseDurationToSeconds(ad.videoDuration);
+  const resolvedInterval = intervalSeconds ?? defaultIntervalForDuration(durationSeconds);
+
   let allFrames: FrameFinding[] = [];
   let summary = "";
   let extractionResult: FrameExtractionResult | null = null;
@@ -551,22 +539,22 @@ export async function runFrameAnalysis(
     if (ad.sourceType === "youtube" && ad.sourceUrl) {
       console.log(`[FrameAnalysis] Extracting frames from YouTube: ${ad.sourceUrl}`);
       extractionResult = await extractFramesFromUrl(
-        ad.sourceUrl, ad.adId, "youtube", intervalSeconds
+        ad.sourceUrl, ad.adId, "youtube", resolvedInterval
       );
     } else if (ad.sourceType === "vimeo" && ad.sourceUrl) {
       console.log(`[FrameAnalysis] Extracting frames from Vimeo: ${ad.sourceUrl}`);
       extractionResult = await extractFramesFromUrl(
-        ad.sourceUrl, ad.adId, "vimeo", intervalSeconds
+        ad.sourceUrl, ad.adId, "vimeo", resolvedInterval
       );
     } else if (ad.sourceType === "direct_url" && ad.sourceUrl) {
       console.log(`[FrameAnalysis] Extracting frames from URL: ${ad.sourceUrl}`);
       extractionResult = await extractFramesFromUrl(
-        ad.sourceUrl, ad.adId, "direct", intervalSeconds
+        ad.sourceUrl, ad.adId, "direct", resolvedInterval
       );
     } else if (ad.fileUrl && ad.format === "video") {
-      console.log(`[FrameAnalysis] Extracting frames from upload: fileKey=${ad.fileKey ?? "(none)"} fileUrl=${(ad.fileUrl ?? "").slice(0, 80)}...`);
+      console.log(`[FrameAnalysis] Extracting frames from upload: fileKey=${ad.fileKey ?? "(none)"} fileUrl=${(ad.fileUrl ?? "").slice(0, 80)}... interval=${resolvedInterval}s`);
       extractionResult = await extractFramesFromUpload(
-        ad.fileUrl, ad.adId, intervalSeconds, ad.fileKey
+        ad.fileUrl, ad.adId, resolvedInterval, ad.fileKey
       );
     } else if (ad.fileUrl && ad.format === "image") {
       // Single image: analyze as one frame (no ffmpeg needed)
@@ -586,7 +574,7 @@ export async function runFrameAnalysis(
       return {
         adId: ad.adId,
         totalFramesAnalyzed: allFrames.length,
-        analysisIntervalSeconds: intervalSeconds,
+        analysisIntervalSeconds: resolvedInterval,
         overallVideoScore: avgScore,
         flaggedFrameCount: flaggedFrames.length,
         frames: allFrames,
@@ -599,7 +587,7 @@ export async function runFrameAnalysis(
       return {
         adId: ad.adId,
         totalFramesAnalyzed: 0,
-        analysisIntervalSeconds: intervalSeconds,
+        analysisIntervalSeconds: resolvedInterval,
         overallVideoScore: 50,
         flaggedFrameCount: 0,
         frames: [],
@@ -652,15 +640,10 @@ export async function runFrameAnalysis(
         }));
       }
 
-      // Process in batches of 5 frames (to stay within vision model token limits).
-      // A 2s inter-batch delay avoids OpenAI rate limits (429).
-      // Each batch retries once after 5s if a rate-limit error is detected.
-      const batchSize = 5;
+      // Process in batches of 10 frames. No inter-batch delay — with adaptive intervals
+      // a 30s ad produces ~6 frames total (1 batch). Delay is added only on 429 retry.
+      const batchSize = 10;
       for (let i = 0; i < frameUrls.length; i += batchSize) {
-        if (i > 0) {
-          console.log(`[FrameAnalysis] Waiting 2s before batch ${Math.floor(i / batchSize) + 1} to avoid rate limits`);
-          await sleep(2000);
-        }
 
         const batch = frameUrls.slice(i, i + batchSize);
         const batchCtx = { title: ad.title, description: ad.description, targetAudience: ad.targetAudience };
@@ -670,42 +653,17 @@ export async function runFrameAnalysis(
           batchResults = await analyzeFrameBatch(batch, batchCtx, policies);
         } catch (batchErr) {
           const errMsg = batchErr instanceof Error ? batchErr.message : String(batchErr);
-          const isRateLimit = /429|rate.?limit|too many requests/i.test(errMsg);
-          console.error(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1} failed: ${errMsg}`);
-
-          if (isRateLimit) {
-            console.warn(`[FrameAnalysis] Rate limit detected — waiting 5s then retrying batch ${Math.floor(i / batchSize) + 1}`);
-            await sleep(5000);
-            try {
-              batchResults = await analyzeFrameBatch(batch, batchCtx, policies);
-              console.log(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1} retry succeeded`);
-            } catch (retryErr) {
-              const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-              console.error(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1} retry also failed: ${retryMsg} — using fallback scores`);
-              batchResults = batch.map((frame, batchIdx) => ({
-                frameIndex: i + batchIdx,
-                timestampSeconds: frame.timestampSeconds,
-                timestampFormatted: formatTimestamp(frame.timestampSeconds),
-                thumbnailUrl: frame.url,
-                score: 50,
-                severity: "info" as const,
-                issues: [],
-                description: `Frame analysis failed after retry: ${retryMsg}`,
-              }));
-            }
-          } else {
-            // Non-rate-limit error — use fallback immediately
-            batchResults = batch.map((frame, batchIdx) => ({
-              frameIndex: i + batchIdx,
-              timestampSeconds: frame.timestampSeconds,
-              timestampFormatted: formatTimestamp(frame.timestampSeconds),
-              thumbnailUrl: frame.url,
-              score: 50,
-              severity: "info" as const,
-              issues: [],
-              description: `Frame analysis failed: ${errMsg}`,
-            }));
-          }
+          console.error(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1} failed: ${errMsg} — using fallback scores`);
+          batchResults = batch.map((frame, batchIdx) => ({
+            frameIndex: i + batchIdx,
+            timestampSeconds: frame.timestampSeconds,
+            timestampFormatted: formatTimestamp(frame.timestampSeconds),
+            thumbnailUrl: frame.url,
+            score: 50,
+            severity: "info" as const,
+            issues: [],
+            description: `Frame analysis failed: ${errMsg}`,
+          }));
         }
 
         // Ensure each frame result has the correct timestamp.
@@ -728,7 +686,7 @@ export async function runFrameAnalysis(
 
       const probe = extractionResult.probe;
       summary = `Analyzed ${allFrames.length} frames from ${probe.durationSeconds.toFixed(1)}s video ` +
-        `(${probe.width}x${probe.height}, ${probe.codec}) at ${intervalSeconds}s intervals using ffmpeg extraction.`;
+        `(${probe.width}x${probe.height}, ${probe.codec}) at ${resolvedInterval}s intervals using ffmpeg extraction.`;
     }
 
     // ─── Step 3: Calculate aggregate scores ──────────────────────────
@@ -743,7 +701,7 @@ export async function runFrameAnalysis(
     return {
       adId: ad.adId,
       totalFramesAnalyzed: allFrames.length,
-      analysisIntervalSeconds: intervalSeconds,
+      analysisIntervalSeconds: resolvedInterval,
       overallVideoScore: avgScore,
       flaggedFrameCount: flaggedFrames.length,
       frames: allFrames,
@@ -759,7 +717,7 @@ export async function runFrameAnalysis(
     return {
       adId: ad.adId,
       totalFramesAnalyzed: allFrames.length,
-      analysisIntervalSeconds: intervalSeconds,
+      analysisIntervalSeconds: resolvedInterval,
       overallVideoScore: 50,
       flaggedFrameCount: 0,
       frames: allFrames,
