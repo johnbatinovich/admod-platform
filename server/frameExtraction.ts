@@ -225,7 +225,7 @@ export async function extractFramesFromFile(
     "-y",
     path.join(jobDir, "frame_%05d.jpg"),
   ], {
-    timeout: Math.max(30_000, probe.durationSeconds * 2_000),
+    timeout: Math.round(Math.max(30_000, probe.durationSeconds * 2_000)),
   });
   console.log(`[FrameExtraction] ffmpeg done in ${Date.now() - t1}ms`);
 
