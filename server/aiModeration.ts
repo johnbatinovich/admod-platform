@@ -13,9 +13,10 @@ export interface ComplianceCategoryScore {
   categoryId: string;
   categoryName: string;
   framework: string;
-  score: number;
-  status: "pass" | "warning" | "fail";
+  score: number | null;
+  status: "pass" | "warning" | "fail" | "skipped";
   findings: ComplianceFindingResult[];
+  skippedReason?: string;
 }
 
 export interface ComplianceFindingResult {
@@ -156,8 +157,8 @@ function isPhantomFinding(finding: { description: string }): boolean {
 
 function reconcileComplianceScores<T extends {
   findings: Array<{ severity: "info" | "warning" | "critical" | "blocking"; description: string }>;
-  score: number;
-  status: "pass" | "warning" | "fail";
+  score: number | null;
+  status: "pass" | "warning" | "fail" | "skipped";
 }>(scores: T[]): T[] {
   return scores.map(cat => {
     const allFindings = cat.findings || [];
@@ -173,8 +174,8 @@ function reconcileComplianceScores<T extends {
     const has = (sev: string) => realFindings.some(f => f.severity === sev);
     const count = realFindings.length;
 
-    let score: number;
-    let status: "pass" | "warning" | "fail";
+    let score: number | null;
+    let status: "pass" | "warning" | "fail" | "skipped";
 
     if (has("blocking")) {
       status = "fail";

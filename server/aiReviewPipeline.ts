@@ -50,8 +50,26 @@ export type ReviewStage =
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const REGULATED_CATEGORIES = [
-  "alcohol", "tobacco", "vaping", "gambling", "pharma", "pharmaceutical",
-  "political", "prescription", "cannabis", "firearms", "weapons", "adult", "nudity",
+  // Substance / age-gated
+  "alcohol", "beer", "wine", "spirits", "liquor",
+  "tobacco", "cigarette", "vaping", "e-cigarette", "vape",
+  "cannabis", "marijuana", "hemp", "cbd",
+  // Wagering
+  "gambling", "casino", "betting", "lottery", "sweepstakes", "sports betting",
+  // Healthcare / pharma
+  "pharma", "pharmaceutical", "prescription", "drug", "medication", "otc",
+  "supplement", "dietary supplement", "clinical trial",
+  // Weapons
+  "firearms", "weapons", "gun", "ammunition", "knife",
+  // Adult / sensitive content
+  "adult", "nudity", "explicit", "sexual",
+  // Political / advocacy
+  "political", "election", "ballot", "candidate", "campaign", "advocacy",
+  "issue advocacy", "psa",
+  // Financial / regulated services
+  "financial", "investment", "credit", "loan", "mortgage", "insurance",
+  // Children
+  "children", "kids", "minors", "coppa",
 ];
 
 // ─── Agentic Routing ──────────────────────────────────────────────────────────
@@ -124,26 +142,37 @@ function computeRoutingDecision(
 
 function requiresDeepAnalysis(stage1: FrameAnalysisResult): boolean {
   if (stage1.overallVideoScore < 80) return true;
+  // Any critical/blocking issue forces deep analysis
   for (const frame of stage1.frames) {
     for (const issue of frame.issues) {
       if (issue.severity === "critical" || issue.severity === "blocking") return true;
-      const text = `${issue.category} ${issue.policyArea}`.toLowerCase();
+      const text = `${issue.category} ${issue.policyArea} ${issue.description ?? ""}`.toLowerCase();
       if (REGULATED_CATEGORIES.some(cat => text.includes(cat))) return true;
     }
   }
   return false;
 }
 
-/** Synthetic pass scores for all FCC/IAB categories — used when Stage 2 is skipped. */
-function buildPassingComplianceScores(): ComplianceCategoryScore[] {
+function isRegulatedContent(ad: { title: string; description?: string | null; targetAudience?: string | null }): boolean {
+  const text = `${ad.title} ${ad.description ?? ""} ${ad.targetAudience ?? ""}`.toLowerCase();
+  return REGULATED_CATEGORIES.some(cat => text.includes(cat));
+}
+
+/**
+ * Returns skipped compliance scores for all FCC/IAB categories.
+ * Used when Stage 2 deep analysis is skipped (quick scan passed, no regulated content).
+ * score: null makes it clear these were NOT evaluated — they are not 100/100 passes.
+ */
+function buildSkippedComplianceScores(): ComplianceCategoryScore[] {
+  const SKIP_REASON = "Quick scan passed with no flagged content — full compliance analysis not triggered";
   return [
     ...FCC_FRAMEWORK.categories.map(cat => ({
       categoryId: cat.id, categoryName: cat.name, framework: "FCC",
-      score: 100, status: "pass" as const, findings: [],
+      score: null, status: "skipped" as const, findings: [], skippedReason: SKIP_REASON,
     })),
     ...IAB_FRAMEWORK.categories.map(cat => ({
       categoryId: cat.id, categoryName: cat.name, framework: "IAB",
-      score: 100, status: "pass" as const, findings: [],
+      score: null, status: "skipped" as const, findings: [], skippedReason: SKIP_REASON,
     })),
   ];
 }
@@ -212,7 +241,9 @@ export async function runUnifiedAiReview(
   }
 
   // ─── Stage 2: Deep Analysis (conditional) ───────────────────────────────
-  const runDeep = !stage1Result || requiresDeepAnalysis(stage1Result);
+  // Always run deep analysis for regulated content categories, even if Stage 1 looks clean.
+  const regulatedByContent = isRegulatedContent(ad);
+  const runDeep = !stage1Result || requiresDeepAnalysis(stage1Result) || regulatedByContent;
   let aiResult: AiAnalysisResult | null = null;
 
   if (runDeep) {
@@ -220,7 +251,8 @@ export async function runUnifiedAiReview(
     stagesRun.push(2);
     console.log(
       `[UnifiedReview] Stage 2 starting — ` +
-      (stage1Result
+      (regulatedByContent ? "regulated content detected in ad metadata" :
+       stage1Result
         ? `triggered by score=${stage1Result.overallVideoScore} flagged=${stage1Result.flaggedFrameCount}`
         : "non-visual content always gets deep analysis"),
     );
@@ -266,10 +298,10 @@ export async function runUnifiedAiReview(
       recommendation: score >= 90 ? "auto_approve" : "needs_review",
       confidence: 85,
       details: {},
-      complianceScores: buildPassingComplianceScores(),
-      overallFccScore: 100,
-      overallIabScore: 100,
-      complianceSummary: "Content passed the quick scan with no compliance issues flagged.",
+      complianceScores: buildSkippedComplianceScores(),
+      overallFccScore: undefined,
+      overallIabScore: undefined,
+      complianceSummary: "Quick scan passed — full FCC/IAB compliance analysis was not run. Trigger a manual AI review to perform a full compliance check.",
       highestRiskArea: undefined,
       requiredActions: [],
       detectedAdvertiser: undefined,

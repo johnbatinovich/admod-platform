@@ -1024,20 +1024,47 @@ export default function AdDetail() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="p-4">
+                            {aiAnalysis.skippedDeepAnalysis && (
+                              <div className="mb-4 p-3 rounded-lg bg-muted/40 border border-border/60 flex items-start gap-2">
+                                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                <p className="text-[12px] text-muted-foreground leading-relaxed">
+                                  Full compliance analysis was not run — the quick scan passed with no flagged content.
+                                  Run AI Review again to perform a full FCC/IAB check.
+                                </p>
+                              </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4 mb-4">
                               <div className="rounded-lg border border-border p-4 text-center">
                                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
-                                <p className={`text-3xl font-bold ${(aiAnalysis.overallFccScore ?? 0) >= 80 ? "text-green-400" : (aiAnalysis.overallFccScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                                  {aiAnalysis.overallFccScore ?? "—"}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                {aiAnalysis.overallFccScore != null ? (
+                                  <>
+                                    <p className={`text-3xl font-bold ${aiAnalysis.overallFccScore >= 80 ? "text-green-400" : aiAnalysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                      {aiAnalysis.overallFccScore}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-3xl font-bold text-muted-foreground">—</p>
+                                    <p className="text-[10px] text-muted-foreground">not evaluated</p>
+                                  </>
+                                )}
                               </div>
                               <div className="rounded-lg border border-border p-4 text-center">
                                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
-                                <p className={`text-3xl font-bold ${(aiAnalysis.overallIabScore ?? 0) >= 80 ? "text-green-400" : (aiAnalysis.overallIabScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                                  {aiAnalysis.overallIabScore ?? "—"}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                {aiAnalysis.overallIabScore != null ? (
+                                  <>
+                                    <p className={`text-3xl font-bold ${aiAnalysis.overallIabScore >= 80 ? "text-green-400" : aiAnalysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                      {aiAnalysis.overallIabScore}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-3xl font-bold text-muted-foreground">—</p>
+                                    <p className="text-[10px] text-muted-foreground">not evaluated</p>
+                                  </>
+                                )}
                               </div>
                             </div>
                             {aiAnalysis.complianceSummary && (
@@ -1512,39 +1539,48 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function ComplianceCategoryCard({ category }: { category: any }) {
   const [expanded, setExpanded] = useState(false);
-  const statusColor = category.status === "pass" ? "text-green-400 border-green-500/20 bg-green-500/5"
+  const isSkipped = category.status === "skipped";
+  const statusColor = isSkipped ? "text-muted-foreground border-border bg-muted/20"
+    : category.status === "pass" ? "text-green-400 border-green-500/20 bg-green-500/5"
     : category.status === "warning" ? "text-yellow-400 border-yellow-500/20 bg-yellow-500/5"
     : "text-red-400 border-red-500/20 bg-red-500/5";
-  const barColor = category.status === "pass" ? "bg-green-500"
+  const barColor = isSkipped ? "bg-muted-foreground/30"
+    : category.status === "pass" ? "bg-green-500"
     : category.status === "warning" ? "bg-yellow-500"
     : "bg-red-500";
   const frameworkColor = category.framework === "FCC" ? "text-blue-400 border-blue-500/30" : "text-purple-400 border-purple-500/30";
 
   return (
-    <div className={`rounded-lg border p-3 transition-colors ${expanded ? statusColor : "border-border/50 bg-background"}`}>
-      <button className="w-full text-left" onClick={() => setExpanded(!expanded)}>
+    <div className={`rounded-lg border p-3 transition-colors ${expanded && !isSkipped ? statusColor : "border-border/50 bg-background"}`}>
+      <button className="w-full text-left" onClick={() => !isSkipped && setExpanded(!expanded)}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm font-medium truncate">{category.categoryName}</span>
+            <span className={`text-sm font-medium truncate ${isSkipped ? "text-muted-foreground" : ""}`}>{category.categoryName}</span>
             <Badge variant="outline" className={`text-[9px] shrink-0 ${frameworkColor}`}>{category.framework}</Badge>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className={`text-[10px] capitalize ${
-              category.status === "pass" ? "border-green-500/30 text-green-400" :
-              category.status === "warning" ? "border-yellow-500/30 text-yellow-400" :
-              "border-red-500/30 text-red-400"
-            }`}>{category.status}</Badge>
-            <span className={`text-lg font-bold ${
-              category.score >= 80 ? "text-green-400" : category.score >= 50 ? "text-yellow-400" : "text-red-400"
-            }`}>{category.score}</span>
+            {isSkipped ? (
+              <span className="text-[11px] text-muted-foreground italic">Not evaluated — quick scan clean</span>
+            ) : (
+              <>
+                <Badge variant="outline" className={`text-[10px] capitalize ${
+                  category.status === "pass" ? "border-green-500/30 text-green-400" :
+                  category.status === "warning" ? "border-yellow-500/30 text-yellow-400" :
+                  "border-red-500/30 text-red-400"
+                }`}>{category.status}</Badge>
+                <span className={`text-lg font-bold ${
+                  category.score >= 80 ? "text-green-400" : category.score >= 50 ? "text-yellow-400" : "text-red-400"
+                }`}>{category.score}</span>
+              </>
+            )}
           </div>
         </div>
         <div className="w-full bg-background rounded-full h-1.5 overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${category.score}%` }} />
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: isSkipped ? "0%" : `${category.score}%` }} />
         </div>
       </button>
 
-      {expanded && category.findings?.length > 0 && (
+      {expanded && !isSkipped && category.findings?.length > 0 && (
         <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
           {category.findings.map((finding: any, idx: number) => (
             <div key={idx} className={`p-2.5 rounded-lg border ${
