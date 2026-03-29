@@ -715,6 +715,24 @@ export function generateCompliancePrompt(frameworks: ComplianceFramework[]): str
 }
 
 /**
+ * Generates a compact prompt for frame-level analysis — category names, rule IDs,
+ * and one-line descriptions only. Saves ~40KB per LLM call vs the full prompt.
+ */
+export function generateCompactCompliancePrompt(frameworks: ComplianceFramework[]): string {
+  let prompt = "COMPLIANCE RULES (flag violations by rule ID):\n";
+  for (const fw of frameworks) {
+    prompt += `\n[${fw.shortName}]\n`;
+    for (const cat of fw.categories) {
+      prompt += `${cat.name}:\n`;
+      for (const rule of cat.rules) {
+        prompt += `  ${rule.id} (${rule.severity}): ${rule.name}\n`;
+      }
+    }
+  }
+  return prompt;
+}
+
+/**
  * Generates the JSON schema for structured compliance scoring output.
  */
 export function getComplianceScoringSchema() {
