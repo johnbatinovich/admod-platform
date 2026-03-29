@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, inArray, isNull, or, like, count } from "drizzle-orm";
+import { eq, desc, and, gte, sql, inArray, isNull, or, like, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import {
@@ -471,4 +471,40 @@ export async function updateFrameAnalysis(id: number, data: Partial<InsertFrameA
   const db = await getDb();
   if (!db) return;
   await db.update(frameAnalyses).set(data).where(eq(frameAnalyses.id, id));
+}
+
+export async function getAgentActivity(limit = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: auditLog.id,
+      entityId: auditLog.entityId,
+      details: auditLog.details,
+      createdAt: auditLog.createdAt,
+      adTitle: adSubmissions.title,
+    })
+    .from(auditLog)
+    .leftJoin(adSubmissions, eq(auditLog.entityId, adSubmissions.id))
+    .where(eq(auditLog.action, "ai_agent_routing"))
+    .orderBy(desc(auditLog.createdAt))
+    .limit(limit);
+}
+
+export async function getAutoStats() {
+  const db = await getDb();
+  if (!db) return { autoApproved: 0, flaggedForReview: 0, autoRejected: 0 };
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ details: auditLog.details })
+    .from(auditLog)
+    .where(and(eq(auditLog.action, "ai_agent_routing"), gte(auditLog.createdAt, sevenDaysAgo)));
+  let autoApproved = 0, flaggedForReview = 0, autoRejected = 0;
+  for (const row of rows) {
+    const d = row.details as any;
+    if (d?.routingDecision === "auto_approve") autoApproved++;
+    else if (d?.routingDecision === "auto_reject") autoRejected++;
+    else if (d?.routingDecision === "needs_review") flaggedForReview++;
+  }
+  return { autoApproved, flaggedForReview, autoRejected };
 }

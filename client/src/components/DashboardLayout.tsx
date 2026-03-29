@@ -54,7 +54,7 @@ const systemMenuItems = [
   { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: Users, label: "Team", path: "/team" },
   { icon: Link2, label: "Integrations", path: "/integrations" },
-  { icon: Settings, label: "Audit Log", path: "/audit" },
+  { icon: Bot, label: "Agent Activity", path: "/audit" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

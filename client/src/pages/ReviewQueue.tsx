@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Clock, AlertTriangle, ArrowRight, FileText } from "lucide-react";
+import { Shield, Clock, AlertTriangle, ArrowRight, FileText, Bot, ChevronRight } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
 
@@ -17,7 +17,8 @@ export default function ReviewQueue() {
     if (!ads) return { submitted: [], inReview: [], escalated: [], changesRequested: [] };
     return {
       submitted: ads.filter(a => a.status === "submitted"),
-      inReview: ads.filter(a => a.status === "in_review"),
+      // Only show in_review ads that were routed here by the AI agent
+      inReview: ads.filter(a => a.status === "in_review" && (a.aiAnalysis as any)?.routingDecision === "needs_review"),
       escalated: ads.filter(a => a.status === "escalated"),
       changesRequested: ads.filter(a => a.status === "changes_requested"),
     };
@@ -29,7 +30,7 @@ export default function ReviewQueue() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Review Queue</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage and review pending ad submissions.</p>
+        <p className="text-sm text-muted-foreground mt-1">Ads routed here by the AI agent for human review.</p>
       </div>
 
       {/* Stats */}
@@ -40,13 +41,13 @@ export default function ReviewQueue() {
         <StatCard icon={FileText} label="Total Reviews" value={reviewStats?.total ?? 0} color="text-muted-foreground" />
       </div>
 
-      <Tabs defaultValue="submitted">
+      <Tabs defaultValue="in_review">
         <TabsList className="bg-card border border-border">
-          <TabsTrigger value="submitted" className="text-xs">
-            Submitted ({queues.submitted.length})
-          </TabsTrigger>
           <TabsTrigger value="in_review" className="text-xs">
             In Review ({queues.inReview.length})
+          </TabsTrigger>
+          <TabsTrigger value="submitted" className="text-xs">
+            Submitted ({queues.submitted.length})
           </TabsTrigger>
           <TabsTrigger value="escalated" className="text-xs">
             Escalated ({queues.escalated.length})
@@ -56,9 +57,82 @@ export default function ReviewQueue() {
           </TabsTrigger>
         </TabsList>
 
-        {(["submitted", "in_review", "escalated", "changes"] as const).map(tab => {
+        {/* In Review — AI-routed only, with moderator brief */}
+        <TabsContent value="in_review">
+          <Card className="bg-card border-border">
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-4 space-y-3">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+                </div>
+              ) : queues.inReview.length > 0 ? (
+                <div className="divide-y divide-border/50">
+                  {queues.inReview.map(ad => {
+                    const ai = ad.aiAnalysis as any;
+                    const step = (ad.currentApprovalStep ?? 0) + 1;
+                    return (
+                      <div
+                        key={ad.id}
+                        className="p-4 hover:bg-accent/50 cursor-pointer transition-colors"
+                        onClick={() => setLocation(`/ads/${ad.id}`)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <PriorityDot priority={ad.priority} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-medium">{ad.title}</p>
+                                <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30 h-4 px-1.5 shrink-0">
+                                  <Bot className="h-2.5 w-2.5 mr-1" />
+                                  AI-Routed
+                                </Badge>
+                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0">
+                                  Step {step}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {ad.format} · {ad.priority} priority
+                                {ai?.confidence !== undefined && ` · AI confidence: ${ai.confidence}%`}
+                                {ad.aiScore !== null && ` · Score: ${ad.aiScore}/100`}
+                              </p>
+                              {ai?.moderatorBrief && (
+                                <p className="text-[12px] text-muted-foreground mt-1.5 leading-relaxed line-clamp-2 bg-muted/40 rounded px-2 py-1">
+                                  {ai.moderatorBrief}
+                                </p>
+                              )}
+                              {ai?.routingReason && !ai?.moderatorBrief && (
+                                <p className="text-[11px] text-muted-foreground/70 mt-1 italic line-clamp-1">
+                                  {ai.routingReason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {ad.aiScore !== null && (
+                              <span className={`text-xs font-bold ${ad.aiScore >= 80 ? "text-green-400" : ad.aiScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                {ad.aiScore}
+                              </span>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Bot className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No AI-routed ads awaiting review.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Other tabs — simpler layout */}
+        {(["submitted", "escalated", "changes"] as const).map(tab => {
           const items = tab === "submitted" ? queues.submitted :
-            tab === "in_review" ? queues.inReview :
             tab === "escalated" ? queues.escalated :
             queues.changesRequested;
           return (
@@ -134,5 +208,5 @@ function PriorityDot({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
     low: "bg-muted-foreground", normal: "bg-blue-500", high: "bg-orange-500", urgent: "bg-red-500",
   };
-  return <div className={`h-2.5 w-2.5 rounded-full ${colors[priority] || "bg-muted-foreground"}`} />;
+  return <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${colors[priority] || "bg-muted-foreground"}`} />;
 }
