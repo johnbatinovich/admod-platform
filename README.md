@@ -22,7 +22,7 @@ Server (Express + TypeScript)
   ├── Frame Extraction Pipeline (ffmpeg + yt-dlp)
   ├── FCC/IAB Compliance Frameworks (38 rules, 11 categories)
   ├── S3 Storage (AWS S3 / Cloudflare R2 / MinIO)
-  └── Database (MySQL via Drizzle ORM)
+  └── Database (PostgreSQL via Drizzle ORM)
 ```
 
 ## Prerequisites
@@ -31,7 +31,7 @@ Server (Express + TypeScript)
 - **pnpm** 10+
 - **ffmpeg** and **ffprobe** (for frame extraction)
 - **yt-dlp** (for YouTube/Vimeo video download)
-- **MySQL** 8+ (or PlanetScale, AWS RDS)
+- **PostgreSQL** 14+ (or Supabase, AWS RDS, Neon)
 - **S3-compatible storage** (AWS S3, Cloudflare R2, MinIO)
 - **OpenAI API key** (GPT-4o for vision analysis) or **Anthropic API key**
 
@@ -74,7 +74,7 @@ See `.env.example` for all available options. The key settings:
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | MySQL connection string |
+| `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | Secret for signing session tokens |
 | `LLM_PROVIDER` | `openai` or `anthropic` |
 | `OPENAI_API_KEY` | For GPT-4o vision analysis |
