@@ -521,6 +521,9 @@ You MUST provide a finding for every single second from 0 through the end of the
 import {
   extractFramesFromUpload,
   extractFramesFromUrl,
+  uploadFramesToStorage,
+  readFramesAsBase64,
+  cleanupJobDir,
   type FrameExtractionResult,
 } from "./frameExtraction";
 
@@ -611,11 +614,43 @@ export async function runFrameAnalysis(
     if (extractionResult && extractionResult.frames.length > 0) {
       console.log(`[FrameAnalysis] Analyzing ${extractionResult.frames.length} extracted frames`);
 
-      // Convert extracted frames to the format analyzeFrameBatch expects
-      const frameUrls = extractionResult.frames.map(f => ({
-        url: f.url,
-        timestampSeconds: f.timestampSeconds,
-      }));
+      // Read frames as base64 directly from disk — avoids the S3 HTTP round-trip
+      // that was the primary failure point (presigned URL issues, network latency).
+      // This must happen BEFORE cleanupJobDir().
+      let frameUrls: { url: string; timestampSeconds: number }[];
+      if (extractionResult.localFramePaths.length > 0) {
+        console.log(`[FrameAnalysis] Reading ${extractionResult.localFramePaths.length} frames from disk as base64`);
+        const base64Frames = readFramesAsBase64(extractionResult.localFramePaths);
+        frameUrls = base64Frames.map(f => ({ url: f.base64DataUrl, timestampSeconds: f.timestampSeconds }));
+        console.log(`[FrameAnalysis] Base64 encoding complete — ${frameUrls.length} frames ready for analysis`);
+
+        // Fire S3 upload in the background (for UI thumbnails). Does NOT block analysis.
+        uploadFramesToStorage(extractionResult.localFramePaths, ad.adId, extractionResult.probe)
+          .then(uploaded => {
+            // Patch the S3 URLs back into extractionResult.frames for the caller
+            uploaded.forEach((f, i) => {
+              if (extractionResult!.frames[i]) {
+                extractionResult!.frames[i].url = f.url;
+                extractionResult!.frames[i].key = f.key;
+              }
+            });
+            console.log(`[FrameAnalysis] Background S3 upload complete: ${uploaded.length} frames`);
+          })
+          .catch(err => console.error(`[FrameAnalysis] Background S3 upload failed (non-fatal):`, err))
+          .finally(() => {
+            // Clean up the job directory only after upload is done (or failed)
+            if (extractionResult!.jobDir) {
+              cleanupJobDir(extractionResult!.jobDir);
+              console.log(`[FrameAnalysis] Job directory cleaned up: ${extractionResult!.jobDir}`);
+            }
+          });
+      } else {
+        // YouTube/thumbnail path: already have public URLs, no disk files
+        frameUrls = extractionResult.frames.map(f => ({
+          url: f.url,
+          timestampSeconds: f.timestampSeconds,
+        }));
+      }
 
       // Process in batches of 5 frames (to stay within vision model token limits).
       // A 2s inter-batch delay avoids OpenAI rate limits (429).
@@ -673,12 +708,15 @@ export async function runFrameAnalysis(
           }
         }
 
-        // Ensure each frame result has the correct S3 thumbnail URL and timestamp
+        // Ensure each frame result has the correct timestamp.
+        // Use the S3 URL for thumbnailUrl only if it's already been populated
+        // (S3 upload may still be in progress); fall back to whatever the batch set.
         const enrichedResults = batchResults.map((finding, batchIdx) => {
           const sourceFrame = extractionResult!.frames[i + batchIdx];
+          const s3Url = sourceFrame?.url || "";
           return {
             ...finding,
-            thumbnailUrl: sourceFrame?.url || finding.thumbnailUrl,
+            thumbnailUrl: s3Url || finding.thumbnailUrl,
             timestampSeconds: sourceFrame?.timestampSeconds ?? finding.timestampSeconds,
             timestampFormatted: formatTimestamp(sourceFrame?.timestampSeconds ?? finding.timestampSeconds),
           };

@@ -66,6 +66,14 @@ export interface FrameExtractionResult {
   intervalSeconds: number;
   /** Path to the local video file (for cleanup) */
   localVideoPath: string | null;
+  /**
+   * Local disk paths of the extracted JPEG files, available until the job
+   * directory is cleaned up. Used to read base64 data before S3 round-trips.
+   * Only populated when frames were extracted via ffmpeg (upload/url paths).
+   */
+  localFramePaths: { path: string; timestampSeconds: number }[];
+  /** Job directory that must be cleaned up after the caller is done with local files */
+  jobDir: string | null;
 }
 
 // ─── Utilities ──────────────────────────────────────────────────────────
@@ -105,6 +113,24 @@ export function cleanupJobDir(jobDir: string): void {
   } catch (err) {
     console.warn(`[FrameExtraction] Failed to clean up ${jobDir}:`, err);
   }
+}
+
+/**
+ * Read extracted JPEG frames from disk and return them as base64 data URLs.
+ *
+ * Call this BEFORE cleanupJobDir() to avoid S3 round-trips in the analysis path.
+ * The returned data URLs are passed directly to the vision model.
+ */
+export function readFramesAsBase64(
+  localFrames: { path: string; timestampSeconds: number }[],
+): { base64DataUrl: string; timestampSeconds: number }[] {
+  return localFrames.map(frame => {
+    const buf = fs.readFileSync(frame.path);
+    return {
+      base64DataUrl: `data:image/jpeg;base64,${buf.toString("base64")}`,
+      timestampSeconds: frame.timestampSeconds,
+    };
+  });
 }
 
 // ─── Video Probing ──────────────────────────────────────────────────────
@@ -385,13 +411,22 @@ export async function uploadFramesToStorage(
  * @param fileKey   - R2/S3 object key; when provided the file is downloaded via
  *                    the AWS SDK, bypassing any URL authentication issues.
  */
+/**
+ * Phase 1 of the upload pipeline: download + ffmpeg extraction only.
+ *
+ * Returns local frame paths and the job directory WITHOUT cleaning up, so the
+ * caller can read frames as base64 before the S3 upload. The caller is
+ * responsible for calling cleanupJobDir(result.jobDir) when done.
+ *
+ * Phase 2 (S3 upload) is handled separately by uploadFramesToStorage() so it
+ * doesn't block the LLM analysis path.
+ */
 export async function extractFramesFromUpload(
   fileUrl: string,
   adId: number,
   intervalSeconds: number = 1,
   fileKey?: string | null,
 ): Promise<FrameExtractionResult> {
-  // Ensure the base frame directory exists before creating a job subdirectory
   ensureDir(FRAME_DIR);
   console.log(`[FrameExtraction] extractFramesFromUpload start: adId=${adId} fileKey=${fileKey ?? "(none)"} fileUrl=${fileUrl.slice(0, 80)}... intervalSeconds=${intervalSeconds}`);
 
@@ -409,7 +444,6 @@ export async function extractFramesFromUpload(
       videoPath = await downloadVideo(fileUrl, jobDir, "direct");
     }
 
-    // Verify the file landed and has non-zero size
     const stat = fs.statSync(videoPath);
     console.log(`[FrameExtraction] Step 1 complete: file at ${videoPath} size=${(stat.size / 1024 / 1024).toFixed(2)}MB`);
     if (stat.size === 0) throw new Error(`Downloaded video file is empty: ${videoPath}`);
@@ -419,22 +453,33 @@ export async function extractFramesFromUpload(
     const { localFrames, probe } = await extractFramesFromFile(videoPath, intervalSeconds, jobDir);
     console.log(`[FrameExtraction] Step 2 complete: ${localFrames.length} frames extracted, duration=${probe.durationSeconds.toFixed(1)}s`);
 
-    // ── Step 3: Upload frames to S3 ───────────────────────────────────
-    console.log(`[FrameExtraction] Step 3: Uploading ${localFrames.length} frames to storage`);
-    const frames = await uploadFramesToStorage(localFrames, adId, probe);
-    console.log(`[FrameExtraction] Step 3 complete: ${frames.length} frames uploaded`);
+    // Return WITHOUT uploading and WITHOUT cleanup — caller handles both.
+    // Populate frames with placeholder URLs; the caller fills in real S3 URLs
+    // after the async upload completes.
+    const placeholderFrames: ExtractedFrame[] = localFrames.map((f, idx) => ({
+      localPath: f.path,
+      url: "",   // filled in after S3 upload
+      key: "",   // filled in after S3 upload
+      timestampSeconds: f.timestampSeconds,
+      timestampFormatted: formatTimestamp(f.timestampSeconds),
+      frameIndex: idx,
+      width: probe.width,
+      height: probe.height,
+    }));
 
     return {
-      frames,
+      frames: placeholderFrames,
       probe,
-      totalFramesExtracted: frames.length,
+      totalFramesExtracted: localFrames.length,
       intervalSeconds,
       localVideoPath: videoPath,
+      localFramePaths: localFrames,
+      jobDir,
     };
-  } finally {
-    // Clean up temp files regardless of success or failure
+  } catch (err) {
+    // On failure clean up immediately since caller won't get a jobDir to clean
     cleanupJobDir(jobDir);
-    console.log(`[FrameExtraction] Job directory cleaned up: ${jobDir}`);
+    throw err;
   }
 }
 
@@ -455,24 +500,34 @@ export async function extractFramesFromUrl(
   const jobDir = createJobDir();
 
   try {
-    // Download the video
     const videoPath = await downloadVideo(sourceUrl, jobDir, provider);
-
-    // Extract frames
     const { localFrames, probe } = await extractFramesFromFile(videoPath, intervalSeconds, jobDir);
 
-    // Upload to S3
-    const frames = await uploadFramesToStorage(localFrames, adId, probe);
+    // For URL-based videos the same local-first approach applies: return local
+    // frame paths so the caller can read base64 before cleanup.
+    const placeholderFrames: ExtractedFrame[] = localFrames.map((f, idx) => ({
+      localPath: f.path,
+      url: "",
+      key: "",
+      timestampSeconds: f.timestampSeconds,
+      timestampFormatted: formatTimestamp(f.timestampSeconds),
+      frameIndex: idx,
+      width: probe.width,
+      height: probe.height,
+    }));
 
     return {
-      frames,
+      frames: placeholderFrames,
       probe,
-      totalFramesExtracted: frames.length,
+      totalFramesExtracted: localFrames.length,
       intervalSeconds,
       localVideoPath: videoPath,
+      localFramePaths: localFrames,
+      jobDir,
     };
-  } finally {
+  } catch (err) {
     cleanupJobDir(jobDir);
+    throw err;
   }
 }
 
