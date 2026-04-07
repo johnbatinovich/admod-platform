@@ -9,7 +9,28 @@
       "Bash(node -e \":*)",
       "Bash(pnpm remove:*)",
       "Bash(git:*)",
-      "Bash(pnpm run:*)"
+      "Bash(pnpm run:*)",
+      "Bash(node -e \"console.log\\(require\\(''/Users/johnbatinovichsm4/Desktop/admod-platform/node_modules/drizzle-orm/package.json''\\).version\\)\")",
+      "Bash(sed -i '' 's/policyId: matchingPolicy?.id ?? 0/policyId: matchingPolicy?.id ?? null/g' /Users/johnbatinovichsm4/Desktop/admod-platform/server/routers.ts)",
+      "Bash(sed -i '' 's/policyId: v.policyId || 0/policyId: v.policyId || null/g' /Users/johnbatinovichsm4/Desktop/admod-platform/server/routers.ts)",
+      "Bash(sed -i '' 's/adSubmissionId: id, policyId: 0,/adSubmissionId: id, policyId: null,/g' /Users/johnbatinovichsm4/Desktop/admod-platform/server/routers.ts)",
+      "Bash(pnpm exec:*)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_YKLHq1UvGIe8@ep-orange-cell-akcxis58-pooler.c-3.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require\" node -e \":*)",
+      "Bash(grep -v \"Use \\\\`node\")",
+      "Bash(brew upgrade:*)",
+      "Bash(grep -l \"getUserByEmail\\\\|getUserByOpenId\\\\|upsertUser\" /Users/johnbatinovichsm4/Desktop/admod-platform/server/*.ts)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(node -e \"const p = require\\(''./node_modules/@google/genai/package.json''\\); console.log\\(p.version, p.main, p.exports?.[''.'']?.import || p.exports?.[''.'']?.require || ''N/A''\\)\")",
+      "Bash(open:*)",
+      "Bash(openssl rand:*)",
+      "Bash(pkill -f 'tsx watch')",
+      "Bash(pkill -f admod-platform)",
+      "Bash(lsof -ti:3000,3001,3002,3003,3004,3005)",
+      "Bash(xargs kill:*)",
+      "Bash(source /Users/johnbatinovichsm4/Desktop/admod-platform/.env)",
+      "Bash(psql \"$DATABASE_URL\" -c \"DELETE FROM users;\")",
+      "Bash(node:*)"
     ]
   }
 }

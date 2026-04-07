@@ -141,7 +141,7 @@ export default function AdSubmissions() {
                     <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">Format</th>
                     <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">Status</th>
                     <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">Priority</th>
-                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">AI Score</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">Clearance</th>
                     <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground p-3">Submitted</th>
                   </tr>
                 </thead>

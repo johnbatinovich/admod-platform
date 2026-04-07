@@ -238,6 +238,7 @@ export default function Home() {
               {agentActivity.map((entry) => {
                 const d = entry.details as any;
                 const decision = d?.routingDecision as string | undefined;
+                const clearance = d?.clearanceScore as number | undefined;
                 const confidence = d?.routingConfidence as number | undefined;
                 const decisionStyle =
                   decision === "auto_approve" ? { badge: "bg-green-500/10 text-green-400 border-green-500/30", label: "Auto-Approved" } :
@@ -257,7 +258,12 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {confidence !== undefined && (
+                      {clearance !== undefined && (
+                        <span className={`text-sm font-bold tabular-nums ${
+                          clearance >= 80 ? "text-green-400" : clearance >= 50 ? "text-yellow-400" : "text-red-400"
+                        }`}>{clearance}</span>
+                      )}
+                      {clearance === undefined && confidence !== undefined && (
                         <span className="text-[11px] text-muted-foreground">{confidence}%</span>
                       )}
                       {decision && (
