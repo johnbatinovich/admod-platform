@@ -14,6 +14,46 @@ import { transcribeVideoAudio } from "./whisperTranscription";
 import { getDefaultPolicySeedData } from "./complianceFrameworks";
 import { nanoid } from "nanoid";
 
+// ─── AI Review Result Saver (preserves run history) ──────────────────────────
+// Before overwriting aiAnalysis, stashes the previous result in previousRuns[].
+// This gives reviewers a full audit trail without requiring a schema change.
+
+async function saveAiReviewResult(
+  adId: number,
+  result: Record<string, unknown>,
+  scores: { aiScore: number; brandSafetyScore: number },
+): Promise<void> {
+  const current = await db.getAdSubmissionById(adId);
+  const existing = (current?.aiAnalysis ?? {}) as Record<string, unknown>;
+
+  // Don't archive stage-progress markers or error stubs — only real completed results
+  const isRealResult = existing && existing.clearanceScore != null;
+  const previousRuns: unknown[] = Array.isArray(existing.previousRuns)
+    ? existing.previousRuns
+    : [];
+
+  if (isRealResult) {
+    const { previousRuns: _, ...existingWithoutHistory } = existing;
+    previousRuns.push({
+      ...existingWithoutHistory,
+      archivedAt: new Date().toISOString(),
+    });
+  }
+
+  const runNumber = previousRuns.length + 1;
+
+  await db.updateAdSubmission(adId, {
+    aiScore: scores.aiScore,
+    brandSafetyScore: scores.brandSafetyScore,
+    aiAnalysis: {
+      ...result,
+      runNumber,
+      ranAt: new Date().toISOString(),
+      previousRuns,
+    } as any,
+  });
+}
+
 // ─── Approval Chain Assignment ───────────────────────────────────────────────
 // After AI review, routes the ad through the default approval chain when the
 // recommendation is "needs_review". auto_approve/auto_reject skip the chain.
@@ -135,10 +175,9 @@ async function performAutoAnalysis(adId: number, triggeredByUserId: number): Pro
       completedAt: new Date(),
     });
 
-    await db.updateAdSubmission(adId, {
+    await saveAiReviewResult(adId, result as unknown as Record<string, unknown>, {
       aiScore: result.clearanceScore,
       brandSafetyScore: result.brandSafetyScore,
-      aiAnalysis: result as any,
     });
 
     // Route through approval chain (or auto-approve/reject) based on agentic routing decision
@@ -553,10 +592,9 @@ export const appRouter = router({
               completedAt: new Date(),
             });
 
-            await db.updateAdSubmission(adId, {
+            await saveAiReviewResult(adId, result as unknown as Record<string, unknown>, {
               aiScore: result.clearanceScore,
               brandSafetyScore: result.brandSafetyScore,
-              aiAnalysis: result as any,
             });
 
             // Route through approval chain (or auto-approve/reject) based on agentic routing decision

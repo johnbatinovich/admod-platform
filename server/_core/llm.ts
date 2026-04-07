@@ -225,6 +225,8 @@ async function invokeOpenAI(params: InvokeParams): Promise<InvokeResult> {
     model,
     messages: messages.map(normalizeMessage),
     max_tokens: params.maxTokens || params.max_tokens || 16384,
+    temperature: 0,  // deterministic outputs for compliance analysis
+    seed: 42,        // OpenAI best-effort reproducibility (same seed + temperature=0 → same output)
   };
 
   if (tools && tools.length > 0) payload.tools = tools;
@@ -235,7 +237,7 @@ async function invokeOpenAI(params: InvokeParams): Promise<InvokeResult> {
   const normalizedResponseFormat = normalizeResponseFormat(rest);
   if (normalizedResponseFormat) payload.response_format = normalizedResponseFormat;
 
-  console.log(`[LLM/OpenAI] Sending request → model=${model} messages=${messages.length} tools=${(payload.tools as any[])?.length ?? 0} response_format=${(payload.response_format as any)?.type ?? "none"} max_tokens=${payload.max_tokens}`);
+  console.log(`[LLM/OpenAI] Sending request → model=${model} messages=${messages.length} tools=${(payload.tools as any[])?.length ?? 0} response_format=${(payload.response_format as any)?.type ?? "none"} max_tokens=${payload.max_tokens} temperature=0 seed=42`);
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -316,6 +318,7 @@ async function invokeAnthropic(params: InvokeParams): Promise<InvokeResult> {
   const payload: Record<string, unknown> = {
     model,
     max_tokens: params.maxTokens || params.max_tokens || 16384,
+    temperature: 0,  // deterministic outputs for compliance analysis
     messages: anthropicMessages,
   };
 

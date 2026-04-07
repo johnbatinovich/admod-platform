@@ -306,6 +306,7 @@ export async function analyzeVideoWithGemini(
         ],
         config: {
           responseMimeType: "application/json",
+          temperature: 0,  // deterministic outputs for compliance analysis
         },
       }),
       GENERATION_TIMEOUT_MS,

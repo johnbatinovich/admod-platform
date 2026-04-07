@@ -669,6 +669,9 @@ export default function AdDetail() {
                             "text-red-400"
                           }`}>{clearanceScore}</p>
                           <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1.5 font-semibold">Clearance</p>
+                          {aiAnalysis.runNumber && (
+                            <span className="text-[9px] text-muted-foreground/60 font-mono">Run #{aiAnalysis.runNumber}</span>
+                          )}
                         </div>
                         {/* Routing details */}
                         <div className="flex-1 space-y-2">
@@ -733,6 +736,46 @@ export default function AdDetail() {
 
                 {aiAnalysis && ad.status !== "ai_screening" && !aiAnalysisError && (
                   <>
+                    {/* ── Previous Runs History ─────────────────────────── */}
+                    {Array.isArray(aiAnalysis.previousRuns) && aiAnalysis.previousRuns.length > 0 && (
+                      <AiAccordion
+                        title={`Previous Runs`}
+                        icon={<Clock className="h-4 w-4" />}
+                        badge={<Badge variant="outline" className="text-[9px] ml-2">{aiAnalysis.previousRuns.length} earlier</Badge>}
+                      >
+                        <div className="space-y-2">
+                          {[...(aiAnalysis.previousRuns as any[])].reverse().map((run: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  Run #{aiAnalysis.previousRuns.length - i}
+                                </span>
+                                <span className={`text-lg font-bold tabular-nums ${
+                                  (run.clearanceScore ?? 0) >= 80 ? "text-green-400" :
+                                  (run.clearanceScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"
+                                }`}>{run.clearanceScore ?? "—"}</span>
+                                {run.routingDecision && (
+                                  <Badge variant="outline" className={`text-[9px] ${
+                                    run.routingDecision === "auto_approve" ? "border-green-500/30 text-green-400" :
+                                    run.routingDecision === "auto_reject"  ? "border-red-500/30 text-red-400" :
+                                                                             "border-yellow-500/30 text-yellow-400"
+                                  }`}>
+                                    {run.routingDecision === "auto_approve" ? "Approved" :
+                                     run.routingDecision === "auto_reject"  ? "Rejected" : "Needs Review"}
+                                  </Badge>
+                                )}
+                              </div>
+                              {run.archivedAt && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {new Date(run.archivedAt).toLocaleDateString()} {new Date(run.archivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </AiAccordion>
+                    )}
+
                     {/* ── TIER 2: Moderator Brief ───────────────────────── */}
                     {aiAnalysis.moderatorBrief && (
                       <Card className="bg-card border-border">
