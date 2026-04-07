@@ -25,6 +25,7 @@ import {
 } from "./complianceFrameworks";
 import { ENV } from "./_core/env";
 import { storageDownloadBuffer } from "./storage";
+import { transcribeVideoAudio, type WhisperTranscriptResult } from "./whisperTranscription";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ export type GeminiAnalysisResult = z.infer<typeof GeminiResponseSchema> & {
   sourceType: "file_upload" | "youtube" | "url";
   /** Wall-clock ms from call to return */
   durationMs: number;
+  /** Whisper transcript (null if transcription was skipped or failed) */
+  transcript: WhisperTranscriptResult | null;
 };
 
 export interface GeminiAnalysisInput {
@@ -224,6 +227,8 @@ export async function analyzeVideoWithGemini(
   let fileUri: string;
   let sourceType: GeminiAnalysisResult["sourceType"];
   let tempDir: string | null = null;
+  /** Local path to the video file — set for S3 and URL modes, null for YouTube */
+  let localVideoPath: string | null = null;
 
   try {
     // ── Resolve video source ──────────────────────────────────────────────────
@@ -233,6 +238,7 @@ export async function analyzeVideoWithGemini(
       console.log(`[Gemini] YouTube direct mode: "${adTitle}" — ${sourceUrl}`);
       fileUri = sourceUrl;
       sourceType = "youtube";
+      // No local file for YouTube — Whisper transcription is skipped.
 
     } else if (fileKey) {
       // Private S3/R2 file: download buffer → write temp → Files API upload
@@ -251,6 +257,7 @@ export async function analyzeVideoWithGemini(
       fs.mkdirSync(tempDir, { recursive: true });
       const tempFile = path.join(tempDir, "video.mp4");
       fs.writeFileSync(tempFile, buffer);
+      localVideoPath = tempFile;
       console.log(
         `[Gemini] Wrote ${(buffer.length / 1024 / 1024).toFixed(1)} MB to ${tempFile}`,
       );
@@ -275,6 +282,7 @@ export async function analyzeVideoWithGemini(
       fs.mkdirSync(tempDir, { recursive: true });
       const tempFile = path.join(tempDir, "video.mp4");
       fs.writeFileSync(tempFile, buffer);
+      localVideoPath = tempFile;
       fileUri = await uploadToGeminiFiles(ai, tempFile, mimeType, `ad-${nanoid(6)}.mp4`);
       sourceType = "url";
 
@@ -284,14 +292,14 @@ export async function analyzeVideoWithGemini(
       );
     }
 
-    // ── Run compliance analysis ────────────────────────────────────────────────
+    // ── Run Gemini compliance analysis + Whisper transcription in parallel ────
 
     console.log(
       `[Gemini] Generating compliance analysis: "${adTitle}" ` +
       `(model=${GEMINI_MODEL} sourceType=${sourceType})`,
     );
 
-    const response = await withTimeout(
+    const geminiPromise = withTimeout(
       ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: [
@@ -310,6 +318,16 @@ export async function analyzeVideoWithGemini(
       GENERATION_TIMEOUT_MS,
       "generateContent",
     );
+
+    // Whisper only when we have a local video file (not for YouTube)
+    const whisperPromise: Promise<WhisperTranscriptResult | null> = localVideoPath
+      ? transcribeVideoAudio({ localPath: localVideoPath, adTitle }).catch((err) => {
+          console.warn(`[Whisper] Transcription failed (non-fatal): ${err.message}`);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const [response, transcript] = await Promise.all([geminiPromise, whisperPromise]);
 
     const rawText = response.text ?? "";
     const elapsedMs = Date.now() - t0;
@@ -338,6 +356,7 @@ export async function analyzeVideoWithGemini(
       analyzedAt: new Date().toISOString(),
       sourceType,
       durationMs: elapsedMs,
+      transcript,
     };
 
   } finally {

@@ -1761,11 +1761,25 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
           </div>
         )}
 
+        {/* Whisper transcript */}
+        {analysis.transcript && (
+          <TranscriptViewer
+            transcript={analysis.transcript}
+            findings={findings}
+          />
+        )}
+
         {/* Metadata footer */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground border-t border-border/50 pt-3">
           <span>Model: {analysis.modelVersion}</span>
           <span>·</span>
           <span>Source: {analysis.sourceType?.replace("_", " ")}</span>
+          {analysis.transcript && (
+            <>
+              <span>·</span>
+              <span>Transcript: {analysis.transcript.segments.length} segments ({analysis.transcript.language})</span>
+            </>
+          )}
           {analysis.analyzedAt && (
             <>
               <span>·</span>
@@ -1781,6 +1795,85 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
         </div>
       </div>
     </AiAccordion>
+  );
+}
+
+// ─── Whisper Transcript Viewer ────────────────────────────────────────────────
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function TranscriptViewer({
+  transcript,
+  findings,
+}: {
+  transcript: { segments: { start: number; end: number; text: string }[]; fullText: string; language: string; durationSeconds: number };
+  findings: any[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Build a set of seconds that have a finding nearby (±2s)
+  const flaggedSeconds = new Set<number>();
+  for (const f of findings) {
+    if (f.timestampSeconds != null) {
+      for (let i = -2; i <= 2; i++) flaggedSeconds.add(Math.round(f.timestampSeconds) + i);
+    }
+  }
+
+  function isSegmentFlagged(seg: { start: number; end: number }): boolean {
+    for (let t = Math.floor(seg.start); t <= Math.ceil(seg.end); t++) {
+      if (flaggedSeconds.has(t)) return true;
+    }
+    return false;
+  }
+
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Whisper Transcript
+          </span>
+          <Badge variant="outline" className="text-[9px]">
+            {transcript.segments.length} segments · {formatTime(transcript.durationSeconds)}
+          </Badge>
+          {findings.some((f) => f.timestampSeconds != null) && (
+            <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-yellow-400">
+              violations highlighted
+            </Badge>
+          )}
+        </div>
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+
+      {expanded && (
+        <div className="max-h-72 overflow-y-auto p-3 space-y-1 bg-background/50">
+          {transcript.segments.map((seg, i) => {
+            const flagged = isSegmentFlagged(seg);
+            return (
+              <div
+                key={i}
+                className={`flex gap-2.5 rounded px-2 py-1 text-xs leading-relaxed ${
+                  flagged ? "bg-yellow-500/10 border border-yellow-500/25" : "hover:bg-muted/40"
+                }`}
+              >
+                <span className={`shrink-0 font-mono text-[10px] mt-0.5 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
+                  {formatTime(seg.start)}
+                </span>
+                <span className={flagged ? "text-yellow-100" : ""}>{seg.text}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
