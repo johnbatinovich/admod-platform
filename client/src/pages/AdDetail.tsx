@@ -12,9 +12,10 @@ import {
   ArrowLeft, Bot, CheckCircle, XCircle, AlertTriangle, MessageSquare,
   Shield, Clock, FileText, Image, Video, Music, Type, Loader2, ExternalLink,
   Youtube, Link2, Film, Play, Eye, TriangleAlert, CircleCheck, Info,
-  Globe, Languages, Flag, Users, Ban, Building2, Megaphone, Zap
+  Globe, Languages, Flag, Users, Ban, Building2, Megaphone, Zap, ChevronDown,
+  Sparkles,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -25,10 +26,12 @@ export default function AdDetail() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
 
-  // Poll while AI review is running (status=ai_screening) or frame analysis is extracting
+  const [geminiRunning, setGeminiRunning] = useState(false);
+
+  // Poll while AI review is running, frame analysis is extracting, or Gemini analysis is in flight
   const { data: ad, isLoading } = trpc.ads.getById.useQuery(
     { id: adId },
-    { refetchInterval: (data: any) => data?.status === "ai_screening" ? 2500 : false }
+    { refetchInterval: (data: any) => (data?.status === "ai_screening" || geminiRunning) ? 2500 : false }
   );
   const { data: frameAnalysis, isLoading: frameLoading } = trpc.ads.getFrameAnalysis.useQuery(
     { adId },
@@ -49,6 +52,14 @@ export default function AdDetail() {
     },
     onError: (e) => toast.error(`AI Review failed: ${e.message}`),
   });
+  const runGeminiAnalysis = trpc.ads.runGeminiAnalysis.useMutation({
+    onSuccess: () => {
+      setGeminiRunning(true);
+      utils.ads.getFrameAnalysis.invalidate({ adId });
+      toast.info("Gemini analysis started — results will appear automatically");
+    },
+    onError: (e) => toast.error(`Gemini analysis failed: ${e.message}`),
+  });
   const submitReview = trpc.reviews.submit.useMutation({
     onSuccess: () => { utils.ads.getById.invalidate({ id: adId }); toast.success("Review submitted"); },
     onError: (e) => toast.error(e.message),
@@ -59,6 +70,15 @@ export default function AdDetail() {
 
   const [reviewComment, setReviewComment] = useState("");
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
+
+  // Stop polling once Gemini results appear in aiAnalysis
+  const geminiAnalysis = (ad?.aiAnalysis as any)?.geminiAnalysis;
+  useEffect(() => {
+    if (geminiRunning && geminiAnalysis) {
+      setGeminiRunning(false);
+      toast.success("Gemini analysis complete");
+    }
+  }, [geminiAnalysis, geminiRunning]);
 
   if (isLoading) {
     return (
@@ -81,6 +101,7 @@ export default function AdDetail() {
   const aiAnalysis = ad.aiAnalysis as any;
   const aiAnalysisError = aiAnalysis?.error === true ? (aiAnalysis.errorMessage as string | undefined) : null;
   const reviewStage: string | undefined = ad.status === "ai_screening" ? aiAnalysis?.reviewStage : undefined;
+  const clearanceScore: number = aiAnalysis?.clearanceScore ?? ad.aiScore ?? 0;
   const FormatIcon = { video: Video, image: Image, audio: Music, text: Type, rich_media: FileText }[ad.format] || FileText;
 
   const handleReview = (decision: "approve" | "reject" | "request_changes" | "escalate") => {
@@ -135,6 +156,19 @@ export default function AdDetail() {
               {reviewStage === "stage2_running" && "Stage 2: Deep analysis…"}
               {reviewStage === "stage3_running" && "Stage 3: Generating report…"}
             </div>
+          )}
+          {ad.format === "video" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => runGeminiAnalysis.mutate({ adId })}
+              disabled={runGeminiAnalysis.isPending || geminiRunning}
+            >
+              {geminiRunning || runGeminiAnalysis.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                : <Sparkles className="h-4 w-4 mr-1.5" />}
+              Gemini Analysis
+            </Button>
           )}
           <Button
             variant="outline"
@@ -545,132 +579,118 @@ export default function AdDetail() {
 
             {/* AI Analysis Tab */}
             <TabsContent value="ai">
-              <div className="space-y-4">
-                {/* ── Scores + Summary ─────────────────────────────────── */}
+              <div className="space-y-3">
+                {/* ── TIER 1: Clearance Score Hero / Loading / Error / Empty ── */}
                 <Card className="bg-card border-border">
                   <CardContent className="p-4">
                     {ad.status === "ai_screening" ? (
-                    <div className="py-8 text-center">
-                      <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-3" />
-                      <h3 className="font-semibold mb-1">AI Review In Progress</h3>
-                      {(() => {
-                        const stages = ["stage1_running", "stage2_running", "stage3_running"];
-                        const labels = ["Stage 1: Quick Scan", "Stage 2: Deep Analysis", "Stage 3: Generating Report"];
-                        const descs = [
-                          "Extracting keyframes and scanning for issues…",
-                          "Running FCC/IAB compliance checks on flagged content…",
-                          "Synthesizing findings and recommendation…",
-                        ];
-                        const idx = stages.indexOf(reviewStage ?? "");
-                        const activeDesc = idx >= 0 ? descs[idx] : descs[0];
-                        return (
-                          <>
-                            <p className="text-xs text-muted-foreground mb-3">{activeDesc}</p>
-                            <div className="flex justify-center gap-3 text-xs">
-                              {stages.map((s, i) => {
-                                const past = idx > i;
-                                const active = idx === i;
-                                return (
-                                  <div key={s} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${active ? "border-primary text-primary bg-primary/5" : past ? "border-green-500/50 text-green-400" : "border-border text-muted-foreground"}`}>
-                                    {past ? <CircleCheck className="h-3 w-3" /> : active ? <Loader2 className="h-3 w-3 animate-spin" /> : <div className="h-3 w-3 rounded-full border border-current opacity-40" />}
-                                    {labels[i]}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : aiAnalysisError ? (
-                    <div className="py-8 text-center">
-                      <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-3">
-                        <span className="text-destructive text-xl font-bold">!</span>
+                      <div className="py-8 text-center">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-3" />
+                        <h3 className="font-semibold mb-1">AI Review In Progress</h3>
+                        {(() => {
+                          const stages = ["stage1_running", "stage2_running", "stage3_running"];
+                          const labels = ["Stage 1: Quick Scan", "Stage 2: Deep Analysis", "Stage 3: Generating Report"];
+                          const descs = [
+                            "Extracting keyframes and scanning for issues…",
+                            "Running FCC/IAB compliance checks on flagged content…",
+                            "Synthesizing findings and recommendation…",
+                          ];
+                          const idx = stages.indexOf(reviewStage ?? "");
+                          const activeDesc = idx >= 0 ? descs[idx] : descs[0];
+                          return (
+                            <>
+                              <p className="text-xs text-muted-foreground mb-3">{activeDesc}</p>
+                              <div className="flex justify-center gap-3 text-xs">
+                                {stages.map((s, i) => {
+                                  const past = idx > i;
+                                  const active = idx === i;
+                                  return (
+                                    <div key={s} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${active ? "border-primary text-primary bg-primary/5" : past ? "border-green-500/50 text-green-400" : "border-border text-muted-foreground"}`}>
+                                      {past ? <CircleCheck className="h-3 w-3" /> : active ? <Loader2 className="h-3 w-3 animate-spin" /> : <div className="h-3 w-3 rounded-full border border-current opacity-40" />}
+                                      {labels[i]}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
-                      <h3 className="font-semibold mb-1 text-destructive">AI Screening Failed</h3>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        The analysis could not be completed. No score has been recorded.
-                      </p>
-                      <p className="text-xs font-mono bg-muted rounded px-3 py-2 text-left max-w-lg mx-auto break-all">
-                        {aiAnalysisError}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-4"
-                        onClick={() => runAiReview.mutate({ adId })}
-                        disabled={runAiReview.isPending}
-                      >
-                        {runAiReview.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-                        Retry AI Review
-                      </Button>
-                    </div>
-                  ) : aiAnalysis ? (
-                      <div className="space-y-4">
-                        {/* Moderator Brief — auto-generated in Stage 3 */}
-                        {aiAnalysis.moderatorBrief && (
-                          <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <Bot className="h-4 w-4 text-primary" />
-                              <span className="text-[11px] uppercase tracking-wider text-primary font-semibold">Moderator Brief</span>
-                              {aiAnalysis.deepAnalysisTriggered === false && (
-                                <Badge variant="outline" className="text-[10px] border-green-500/40 text-green-400">Quick scan only</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm leading-relaxed">{aiAnalysis.moderatorBrief}</p>
+                    ) : aiAnalysisError ? (
+                      <div className="py-8 text-center">
+                        <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-3">
+                          <span className="text-destructive text-xl font-bold">!</span>
+                        </div>
+                        <h3 className="font-semibold mb-1 text-destructive">AI Screening Failed</h3>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          The analysis could not be completed. No score has been recorded.
+                        </p>
+                        <p className="text-xs font-mono bg-muted rounded px-3 py-2 text-left max-w-lg mx-auto break-all">
+                          {aiAnalysisError}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-4"
+                          onClick={() => runAiReview.mutate({ adId })}
+                          disabled={runAiReview.isPending}
+                        >
+                          {runAiReview.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                          Retry AI Review
+                        </Button>
+                      </div>
+                    ) : aiAnalysis ? (
+                      <div className="flex items-start gap-5">
+                        {/* Big clearance score */}
+                        <div className="text-center shrink-0 min-w-[88px]">
+                          <p className={`text-7xl font-black leading-none tabular-nums ${
+                            clearanceScore >= 80 ? "text-green-400" :
+                            clearanceScore >= 50 ? "text-yellow-400" :
+                            "text-red-400"
+                          }`}>{clearanceScore}</p>
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1.5 font-semibold">Clearance</p>
+                        </div>
+                        {/* Routing details */}
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {aiAnalysis.routingDecision && (
+                              <Badge className={`text-xs px-2.5 py-0.5 ${
+                                aiAnalysis.routingDecision === "auto_approve"
+                                  ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                                  : aiAnalysis.routingDecision === "auto_reject"
+                                  ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                                  : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                              }`}>
+                                <Zap className="h-3 w-3 mr-1" />
+                                {aiAnalysis.routingDecision === "auto_approve" ? "Auto-Approved" :
+                                 aiAnalysis.routingDecision === "auto_reject" ? "Auto-Rejected" :
+                                 "Routed to Review"}
+                              </Badge>
+                            )}
+                            {aiAnalysis.skippedDeepAnalysis && (
+                              <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400">Quick scan only</Badge>
+                            )}
+                            {aiAnalysis.isPoliticalAd && (
+                              <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px]">
+                                <Megaphone className="h-2.5 w-2.5 mr-1" />Political
+                              </Badge>
+                            )}
                           </div>
-                        )}
-                        {/* AI Agent Decision — routing reasoning */}
-                        {aiAnalysis.routingDecision && (
-                          <div className={`p-3 rounded-lg border ${
-                            aiAnalysis.routingDecision === "auto_approve"
-                              ? "bg-green-500/5 border-green-500/20"
-                              : aiAnalysis.routingDecision === "auto_reject"
-                              ? "bg-red-500/5 border-red-500/20"
-                              : "bg-yellow-500/5 border-yellow-500/20"
-                          }`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Zap className={`h-4 w-4 ${
-                                  aiAnalysis.routingDecision === "auto_approve" ? "text-green-400" :
-                                  aiAnalysis.routingDecision === "auto_reject" ? "text-red-400" :
-                                  "text-yellow-400"
-                                }`} />
-                                <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">AI Agent Decision</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Badge variant="outline" className={`text-[10px] ${
-                                  aiAnalysis.routingDecision === "auto_approve" ? "border-green-500/40 text-green-400" :
-                                  aiAnalysis.routingDecision === "auto_reject" ? "border-red-500/40 text-red-400" :
-                                  "border-yellow-500/40 text-yellow-400"
-                                }`}>
-                                  {aiAnalysis.routingDecision.replace(/_/g, " ")}
-                                </Badge>
-                                {aiAnalysis.skippedDeepAnalysis && (
-                                  <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400">Quick scan only</Badge>
-                                )}
-                              </div>
+                          {aiAnalysis.routingReason && (
+                            <p className="text-sm text-muted-foreground leading-relaxed">{aiAnalysis.routingReason}</p>
+                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] text-muted-foreground">Confidence</span>
+                              <span className={`text-[11px] font-bold ${
+                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 85 ? "text-green-400" :
+                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 60 ? "text-yellow-400" :
+                                "text-red-400"
+                              }`}>{aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}%</span>
                             </div>
-                            {/* Confidence bar */}
-                            <div className="mb-2">
-                              <div className="flex justify-between mb-1">
-                                <span className="text-[10px] text-muted-foreground">Confidence</span>
-                                <span className={`text-[10px] font-bold ${
-                                  (aiAnalysis.routingConfidence ?? 0) >= 85 ? "text-green-400" :
-                                  (aiAnalysis.routingConfidence ?? 0) >= 60 ? "text-yellow-400" :
-                                  "text-red-400"
-                                }`}>{aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}%</span>
-                              </div>
-                              <Progress
-                                value={aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}
-                                className="h-1.5"
-                              />
-                            </div>
-                            {/* Stages completed */}
                             {aiAnalysis.stagesCompleted?.length > 0 && (
-                              <div className="flex items-center gap-1.5 mb-2">
-                                <span className="text-[10px] text-muted-foreground">Stages:</span>
-                                {[1, 2, 3].map(s => (
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3].map((s: number) => (
                                   <span key={s} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                                     aiAnalysis.stagesCompleted.includes(s)
                                       ? "bg-primary/15 text-primary"
@@ -679,60 +699,8 @@ export default function AdDetail() {
                                 ))}
                               </div>
                             )}
-                            {/* Routing reason */}
-                            {aiAnalysis.routingReason && (
-                              <p className="text-xs text-muted-foreground leading-relaxed">{aiAnalysis.routingReason}</p>
-                            )}
                           </div>
-                        )}
-
-                        <div className="grid grid-cols-3 gap-3">
-                          <ScoreCard label="Overall Score" score={ad.aiScore ?? 0} />
-                          <ScoreCard label="Brand Safety" score={ad.brandSafetyScore ?? 0} />
-                          <ScoreCard label="Confidence" score={aiAnalysis.confidence ?? 0} />
                         </div>
-                        <div className="flex items-center gap-3">
-                          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Recommendation</label>
-                          <Badge variant={aiAnalysis.recommendation === "auto_approve" ? "default" : aiAnalysis.recommendation === "auto_reject" ? "destructive" : "secondary"}>
-                            {aiAnalysis.recommendation?.replace(/_/g, " ")}
-                          </Badge>
-                          {aiAnalysis.isPoliticalAd && (
-                            <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 flex items-center gap-1">
-                              <Megaphone className="h-3 w-3" />Political Ad
-                            </Badge>
-                          )}
-                        </div>
-                        <div>
-                          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Summary</label>
-                          <p className="text-sm mt-1">{aiAnalysis.summary}</p>
-                        </div>
-                        {aiAnalysis.contentCategories?.length > 0 && (
-                          <div>
-                            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Content Categories</label>
-                            <div className="flex flex-wrap gap-1.5 mt-1">
-                              {aiAnalysis.contentCategories.map((cat: string) => (
-                                <Badge key={cat} variant="outline" className="text-[11px]">{cat}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {aiAnalysis.details?.textAnalysis && (
-                          <div>
-                            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Text Analysis</label>
-                            <div className="mt-1 text-sm space-y-1">
-                              <p>Sentiment: <span className="text-foreground">{aiAnalysis.details.textAnalysis.sentiment}</span></p>
-                              <p>Tone: <span className="text-foreground">{aiAnalysis.details.textAnalysis.tone}</span></p>
-                              {aiAnalysis.details.textAnalysis.flaggedPhrases?.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  <span className="text-muted-foreground">Flagged phrases:</span>
-                                  {aiAnalysis.details.textAnalysis.flaggedPhrases.map((p: string, i: number) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400">{p}</Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -743,19 +711,219 @@ export default function AdDetail() {
                   </CardContent>
                 </Card>
 
-                {aiAnalysis && (
+                {aiAnalysis && ad.status !== "ai_screening" && !aiAnalysisError && (
                   <>
-                    {/* ── Content Intelligence ─────────────────────────── */}
-                    <Card className="bg-card border-border">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-primary" />
-                          Content Intelligence
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 space-y-4">
+                    {/* ── TIER 2: Moderator Brief ───────────────────────── */}
+                    {aiAnalysis.moderatorBrief && (
+                      <Card className="bg-card border-border">
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Bot className="h-4 w-4 text-primary" />
+                            <span className="text-[11px] uppercase tracking-wider text-primary font-semibold">Moderator Brief</span>
+                          </div>
+                          <p className="text-sm leading-relaxed">{aiAnalysis.moderatorBrief}</p>
+                        </CardContent>
+                      </Card>
+                    )}
 
-                        {/* Advertiser */}
+                    {/* ── TIER 3a: Regulatory Breakdown ─────────────────── */}
+                    {aiAnalysis.complianceScores?.length > 0 && (
+                      <AiAccordion
+                        title="Regulatory Breakdown"
+                        icon={<Shield className="h-4 w-4" />}
+                        badge={
+                          aiAnalysis.complianceScores.some((c: any) => c.status === "fail")
+                            ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">Issues found</Badge>
+                            : aiAnalysis.complianceScores.some((c: any) => c.status === "warning")
+                            ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">Warnings</Badge>
+                            : aiAnalysis.skippedDeepAnalysis
+                            ? <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground ml-2">Not evaluated</Badge>
+                            : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>
+                        }
+                      >
+                        <div className="space-y-4">
+                          {aiAnalysis.skippedDeepAnalysis && (
+                            <div className="p-3 rounded-lg bg-muted/40 border border-border/60 flex items-start gap-2">
+                              <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                                Full compliance analysis was not run — the quick scan passed with no flagged content.
+                                Run AI Review again to perform a full FCC/IAB check.
+                              </p>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="rounded-lg border border-border p-4 text-center">
+                              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
+                              {aiAnalysis.overallFccScore != null ? (
+                                <>
+                                  <p className={`text-3xl font-bold ${aiAnalysis.overallFccScore >= 80 ? "text-green-400" : aiAnalysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                    {aiAnalysis.overallFccScore}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-3xl font-bold text-muted-foreground">—</p>
+                                  <p className="text-[10px] text-muted-foreground">not evaluated</p>
+                                </>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-border p-4 text-center">
+                              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
+                              {aiAnalysis.overallIabScore != null ? (
+                                <>
+                                  <p className={`text-3xl font-bold ${aiAnalysis.overallIabScore >= 80 ? "text-green-400" : aiAnalysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                    {aiAnalysis.overallIabScore}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">/ 100</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-3xl font-bold text-muted-foreground">—</p>
+                                  <p className="text-[10px] text-muted-foreground">not evaluated</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {aiAnalysis.complianceSummary && (
+                            <div className="p-3 rounded-lg bg-background border border-border/50">
+                              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Compliance Summary</label>
+                              <p className="text-sm mt-1">{aiAnalysis.complianceSummary}</p>
+                            </div>
+                          )}
+                          {aiAnalysis.highestRiskArea && (
+                            <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                              <div className="flex items-center gap-2 mb-1">
+                                <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                                <label className="text-[11px] uppercase tracking-wider text-red-400 font-semibold">Highest Risk Area</label>
+                              </div>
+                              <p className="text-sm">{aiAnalysis.highestRiskArea}</p>
+                            </div>
+                          )}
+                          {aiAnalysis.requiredActions?.length > 0 && (
+                            <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                              <label className="text-[11px] uppercase tracking-wider text-yellow-400 font-semibold">Required Actions Before Airing</label>
+                              <div className="mt-2 space-y-1.5">
+                                {aiAnalysis.requiredActions.map((action: string, idx: number) => (
+                                  <div key={idx} className="flex items-start gap-2">
+                                    <span className="text-yellow-400 text-xs mt-0.5 font-bold">{idx + 1}.</span>
+                                    <p className="text-sm">{action}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                <Shield className="h-3.5 w-3.5 text-blue-400" />FCC Broadcast Compliance
+                              </h4>
+                              <div className="space-y-3">
+                                {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").map((cs: any, idx: number) => (
+                                  <ComplianceCategoryCard key={idx} category={cs} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                <Shield className="h-3.5 w-3.5 text-purple-400" />IAB Advertising Standards
+                              </h4>
+                              <div className="space-y-3">
+                                {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").map((cs: any, idx: number) => (
+                                  <ComplianceCategoryCard key={idx} category={cs} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </AiAccordion>
+                    )}
+
+                    {/* ── TIER 3b: Visual Analysis ──────────────────────── */}
+                    {(frameAnalysis || aiAnalysis.overallVideoScore != null) && (
+                      <AiAccordion
+                        title="Visual Analysis"
+                        icon={<Film className="h-4 w-4" />}
+                        badge={
+                          (aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0) > 0
+                            ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount} flagged</Badge>
+                            : null
+                        }
+                      >
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div className="rounded-lg border border-border p-3 text-center">
+                              <p className={`text-2xl font-bold ${
+                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 80 ? "text-green-400" :
+                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 50 ? "text-yellow-400" :
+                                "text-red-400"
+                              }`}>{aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? "—"}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Video Score</p>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 text-center">
+                              <p className="text-2xl font-bold">{aiAnalysis.totalFramesAnalyzed ?? frameAnalysis?.totalFramesAnalyzed ?? "—"}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Frames</p>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 text-center">
+                              <p className={`text-2xl font-bold ${(aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0) === 0 ? "text-green-400" : "text-red-400"}`}>
+                                {aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Flagged</p>
+                            </div>
+                            <div className="rounded-lg border border-border p-3 text-center">
+                              <p className="text-lg font-bold text-red-400 leading-tight">
+                                {aiAnalysis.worstTimestamp ?? frameAnalysis?.worstTimestamp ?? "—"}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Worst Frame</p>
+                            </div>
+                          </div>
+                          {(aiAnalysis.frameSummary || frameAnalysis?.summary) && (
+                            <p className="text-sm text-muted-foreground">{aiAnalysis.frameSummary || frameAnalysis?.summary}</p>
+                          )}
+                          {(aiAnalysis.worstIssue || frameAnalysis?.worstIssue) && (
+                            <div className="p-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <TriangleAlert className="h-3.5 w-3.5 text-red-400" />
+                                <span className="text-[11px] text-red-400 font-semibold uppercase tracking-wider">Worst Issue</span>
+                              </div>
+                              <p className="text-sm">{aiAnalysis.worstIssue || frameAnalysis?.worstIssue}</p>
+                            </div>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => document.querySelector<HTMLButtonElement>('[value="frames"]')?.click()}
+                          >
+                            <Film className="h-3.5 w-3.5 mr-1.5" />View All Frames
+                          </Button>
+                        </div>
+                      </AiAccordion>
+                    )}
+
+                    {/* ── TIER 3d: Gemini Native Video Analysis ─────────── */}
+                    {ad.format === "video" && (
+                      <GeminiSection
+                        analysis={aiAnalysis?.geminiAnalysis}
+                        isRunning={geminiRunning}
+                        onRun={() => runGeminiAnalysis.mutate({ adId })}
+                        isPending={runGeminiAnalysis.isPending}
+                      />
+                    )}
+
+                    {/* ── TIER 3c: Content Intelligence ─────────────────── */}
+                    <AiAccordion
+                      title="Content Intelligence"
+                      icon={<Zap className="h-4 w-4" />}
+                      badge={
+                        (aiAnalysis.objectionalContent?.length > 0 || aiAnalysis.flaggableContent?.length > 0)
+                          ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">Flagged items</Badge>
+                          : null
+                      }
+                    >
+                      <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="p-3 rounded-lg bg-background border border-border/50">
                             <div className="flex items-center gap-1.5 mb-1">
@@ -774,8 +942,6 @@ export default function AdDetail() {
                               <p className="text-sm text-muted-foreground">Not identified</p>
                             )}
                           </div>
-
-                          {/* Languages */}
                           <div className="p-3 rounded-lg bg-background border border-border/50">
                             <div className="flex items-center gap-1.5 mb-1">
                               <Languages className="h-3.5 w-3.5 text-muted-foreground" />
@@ -795,8 +961,16 @@ export default function AdDetail() {
                             )}
                           </div>
                         </div>
-
-                        {/* Political Ad Details */}
+                        {aiAnalysis.contentCategories?.length > 0 && (
+                          <div>
+                            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Content Categories</label>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {aiAnalysis.contentCategories.map((cat: string) => (
+                                <Badge key={cat} variant="outline" className="text-[11px]">{cat}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {aiAnalysis.isPoliticalAd && aiAnalysis.politicalDetails && (
                           <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
                             <div className="flex items-center gap-1.5 mb-2">
@@ -819,8 +993,6 @@ export default function AdDetail() {
                             </div>
                           </div>
                         )}
-
-                        {/* Objectionable Content */}
                         {aiAnalysis.objectionalContent?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
@@ -853,8 +1025,6 @@ export default function AdDetail() {
                             </div>
                           </div>
                         )}
-
-                        {/* Flaggable Content */}
                         {aiAnalysis.flaggableContent?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
@@ -891,250 +1061,131 @@ export default function AdDetail() {
                             </div>
                           </div>
                         )}
-
-                        {/* Clean slate */}
                         {!aiAnalysis.objectionalContent?.length && !aiAnalysis.flaggableContent?.length && (
                           <div className="flex items-center gap-2 text-sm text-green-400 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
                             <CircleCheck className="h-4 w-4" />
                             No objectionable or flaggable content detected.
                           </div>
                         )}
-                      </CardContent>
-                    </Card>
-
-                    {/* ── Audience Targeting Intelligence ──────────────── */}
-                    {aiAnalysis.audienceDemographics && (
-                      <Card className="bg-card border-border">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Users className="h-4 w-4 text-primary" />
-                            Audience Targeting Intelligence
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 space-y-5">
-
-                          {/* Recommended Segments */}
-                          {aiAnalysis.audienceDemographics.recommended?.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-green-400 mb-2 flex items-center gap-1.5">
-                                <CheckCircle className="h-3.5 w-3.5" />
-                                Recommended Audiences
-                              </h4>
-                              <div className="space-y-2">
-                                {aiAnalysis.audienceDemographics.recommended.map((seg: any, i: number) => (
-                                  <div key={i} className="p-2.5 rounded-lg bg-green-500/5 border border-green-500/20">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1">
-                                        <p className="text-sm font-medium">{seg.segment}</p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">{seg.reasoning}</p>
-                                      </div>
-                                      {seg.geographies?.length > 0 && (
-                                        <div className="flex flex-wrap gap-1 shrink-0 max-w-[160px]">
-                                          {seg.geographies.slice(0, 3).map((geo: string, gi: number) => (
-                                            <Badge key={gi} variant="outline" className="text-[9px] border-green-500/30 text-green-400">
-                                              <Globe className="h-2.5 w-2.5 mr-0.5" />{geo}
-                                            </Badge>
-                                          ))}
-                                          {seg.geographies.length > 3 && (
-                                            <Badge variant="outline" className="text-[9px]">+{seg.geographies.length - 3}</Badge>
-                                          )}
+                        {/* Audience Demographics */}
+                        {aiAnalysis.audienceDemographics && (
+                          <div className="space-y-4 border-t border-border/50 pt-4">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5" />Audience Targeting
+                            </h4>
+                            {aiAnalysis.audienceDemographics.recommended?.length > 0 && (
+                              <div>
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-green-400 mb-2 flex items-center gap-1.5">
+                                  <CheckCircle className="h-3.5 w-3.5" />Recommended Audiences
+                                </h5>
+                                <div className="space-y-2">
+                                  {aiAnalysis.audienceDemographics.recommended.map((seg: any, i: number) => (
+                                    <div key={i} className="p-2.5 rounded-lg bg-green-500/5 border border-green-500/20">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium">{seg.segment}</p>
+                                          <p className="text-xs text-muted-foreground mt-0.5">{seg.reasoning}</p>
                                         </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Lookalike Advertisers */}
-                          {aiAnalysis.audienceDemographics.lookalikAdvertisers?.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2 flex items-center gap-1.5">
-                                <Building2 className="h-3.5 w-3.5" />
-                                Lookalike Advertisers
-                              </h4>
-                              <div className="grid grid-cols-2 gap-2">
-                                {aiAnalysis.audienceDemographics.lookalikAdvertisers.map((adv: any, i: number) => (
-                                  <div key={i} className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                                    <p className="text-sm font-medium">{adv.name}</p>
-                                    <p className="text-[10px] text-muted-foreground">{adv.industry}</p>
-                                    <p className="text-[11px] text-muted-foreground mt-1">{adv.similarity}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Blocked Audiences */}
-                          {aiAnalysis.audienceDemographics.blockedAudiences?.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-red-400 mb-2 flex items-center gap-1.5">
-                                <Ban className="h-3.5 w-3.5" />
-                                Must Not Reach
-                              </h4>
-                              <div className="space-y-2">
-                                {aiAnalysis.audienceDemographics.blockedAudiences.map((block: any, i: number) => (
-                                  <div key={i} className={`p-2.5 rounded-lg border ${
-                                    block.severity === "legal" ? "bg-red-500/5 border-red-500/30" :
-                                    block.severity === "required" ? "bg-red-500/5 border-red-500/20" :
-                                    "bg-yellow-500/5 border-yellow-500/20"
-                                  }`}>
-                                    <div className="flex items-start justify-between gap-2 mb-1">
-                                      <div className="flex items-center gap-1.5">
-                                        <Ban className={`h-3.5 w-3.5 shrink-0 ${
-                                          block.severity === "legal" ? "text-red-400" :
-                                          block.severity === "required" ? "text-red-400" :
-                                          "text-yellow-400"
-                                        }`} />
-                                        <p className="text-sm font-medium">{block.segment}</p>
+                                        {seg.geographies?.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 shrink-0 max-w-[160px]">
+                                            {seg.geographies.slice(0, 3).map((geo: string, gi: number) => (
+                                              <Badge key={gi} variant="outline" className="text-[9px] border-green-500/30 text-green-400">
+                                                <Globe className="h-2.5 w-2.5 mr-0.5" />{geo}
+                                              </Badge>
+                                            ))}
+                                            {seg.geographies.length > 3 && (
+                                              <Badge variant="outline" className="text-[9px]">+{seg.geographies.length - 3}</Badge>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
-                                      <Badge
-                                        variant="outline"
-                                        className={`text-[9px] shrink-0 ${
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {aiAnalysis.audienceDemographics.lookalikAdvertisers?.length > 0 && (
+                              <div>
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2 flex items-center gap-1.5">
+                                  <Building2 className="h-3.5 w-3.5" />Lookalike Advertisers
+                                </h5>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {aiAnalysis.audienceDemographics.lookalikAdvertisers.map((adv: any, i: number) => (
+                                    <div key={i} className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                                      <p className="text-sm font-medium">{adv.name}</p>
+                                      <p className="text-[10px] text-muted-foreground">{adv.industry}</p>
+                                      <p className="text-[11px] text-muted-foreground mt-1">{adv.similarity}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {aiAnalysis.audienceDemographics.blockedAudiences?.length > 0 && (
+                              <div>
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-red-400 mb-2 flex items-center gap-1.5">
+                                  <Ban className="h-3.5 w-3.5" />Must Not Reach
+                                </h5>
+                                <div className="space-y-2">
+                                  {aiAnalysis.audienceDemographics.blockedAudiences.map((block: any, i: number) => (
+                                    <div key={i} className={`p-2.5 rounded-lg border ${
+                                      block.severity === "legal" ? "bg-red-500/5 border-red-500/30" :
+                                      block.severity === "required" ? "bg-red-500/5 border-red-500/20" :
+                                      "bg-yellow-500/5 border-yellow-500/20"
+                                    }`}>
+                                      <div className="flex items-start justify-between gap-2 mb-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <Ban className={`h-3.5 w-3.5 shrink-0 ${
+                                            block.severity === "legal" || block.severity === "required" ? "text-red-400" : "text-yellow-400"
+                                          }`} />
+                                          <p className="text-sm font-medium">{block.segment}</p>
+                                        </div>
+                                        <Badge variant="outline" className={`text-[9px] shrink-0 ${
                                           block.severity === "legal" ? "border-red-500/40 text-red-400" :
                                           block.severity === "required" ? "border-red-500/30 text-red-300" :
                                           "border-yellow-500/30 text-yellow-400"
-                                        }`}
-                                      >
-                                        {block.severity}
-                                      </Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{block.reason}</p>
-                                    {block.legalBasis && (
-                                      <p className="text-[10px] text-muted-foreground mt-1 font-mono">{block.legalBasis}</p>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* ── FCC/IAB Compliance Scoring ──────────────────── */}
-                    {aiAnalysis.complianceScores?.length > 0 && (
-                      <>
-                        <Card className="bg-card border-border">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Shield className="h-4 w-4 text-primary" />
-                              Regulatory Compliance Scores
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-4">
-                            {aiAnalysis.skippedDeepAnalysis && (
-                              <div className="mb-4 p-3 rounded-lg bg-muted/40 border border-border/60 flex items-start gap-2">
-                                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                                <p className="text-[12px] text-muted-foreground leading-relaxed">
-                                  Full compliance analysis was not run — the quick scan passed with no flagged content.
-                                  Run AI Review again to perform a full FCC/IAB check.
-                                </p>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                              <div className="rounded-lg border border-border p-4 text-center">
-                                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
-                                {aiAnalysis.overallFccScore != null ? (
-                                  <>
-                                    <p className={`text-3xl font-bold ${aiAnalysis.overallFccScore >= 80 ? "text-green-400" : aiAnalysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                                      {aiAnalysis.overallFccScore}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">/ 100</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <p className="text-3xl font-bold text-muted-foreground">—</p>
-                                    <p className="text-[10px] text-muted-foreground">not evaluated</p>
-                                  </>
-                                )}
-                              </div>
-                              <div className="rounded-lg border border-border p-4 text-center">
-                                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
-                                {aiAnalysis.overallIabScore != null ? (
-                                  <>
-                                    <p className={`text-3xl font-bold ${aiAnalysis.overallIabScore >= 80 ? "text-green-400" : aiAnalysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                                      {aiAnalysis.overallIabScore}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">/ 100</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <p className="text-3xl font-bold text-muted-foreground">—</p>
-                                    <p className="text-[10px] text-muted-foreground">not evaluated</p>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            {aiAnalysis.complianceSummary && (
-                              <div className="mb-4 p-3 rounded-lg bg-background border border-border/50">
-                                <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Compliance Summary</label>
-                                <p className="text-sm mt-1">{aiAnalysis.complianceSummary}</p>
-                              </div>
-                            )}
-                            {aiAnalysis.highestRiskArea && (
-                              <div className="mb-4 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                                  <label className="text-[11px] uppercase tracking-wider text-red-400 font-semibold">Highest Risk Area</label>
-                                </div>
-                                <p className="text-sm">{aiAnalysis.highestRiskArea}</p>
-                              </div>
-                            )}
-                            {aiAnalysis.requiredActions?.length > 0 && (
-                              <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
-                                <label className="text-[11px] uppercase tracking-wider text-yellow-400 font-semibold">Required Actions Before Airing</label>
-                                <div className="mt-2 space-y-1.5">
-                                  {aiAnalysis.requiredActions.map((action: string, idx: number) => (
-                                    <div key={idx} className="flex items-start gap-2">
-                                      <span className="text-yellow-400 text-xs mt-0.5 font-bold">{idx + 1}.</span>
-                                      <p className="text-sm">{action}</p>
+                                        }`}>{block.severity}</Badge>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">{block.reason}</p>
+                                      {block.legalBasis && (
+                                        <p className="text-[10px] text-muted-foreground mt-1 font-mono">{block.legalBasis}</p>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             )}
-                          </CardContent>
-                        </Card>
-
-                        <Card className="bg-card border-border">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-primary" />
-                              Category Breakdown
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-4">
-                            {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").length > 0 && (
-                              <div className="mb-6">
-                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                  <Shield className="h-3.5 w-3.5 text-blue-400" />FCC Broadcast Compliance
-                                </h4>
-                                <div className="space-y-3">
-                                  {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").map((cs: any, idx: number) => (
-                                    <ComplianceCategoryCard key={idx} category={cs} />
+                          </div>
+                        )}
+                        {aiAnalysis.details?.textAnalysis && (
+                          <div className="border-t border-border/50 pt-4">
+                            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Text Analysis</label>
+                            <div className="mt-1 text-sm space-y-1">
+                              <p>Sentiment: <span className="text-foreground">{aiAnalysis.details.textAnalysis.sentiment}</span></p>
+                              <p>Tone: <span className="text-foreground">{aiAnalysis.details.textAnalysis.tone}</span></p>
+                              {aiAnalysis.details.textAnalysis.flaggedPhrases?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  <span className="text-muted-foreground">Flagged phrases:</span>
+                                  {aiAnalysis.details.textAnalysis.flaggedPhrases.map((p: string, i: number) => (
+                                    <Badge key={i} variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400">{p}</Badge>
                                   ))}
                                 </div>
-                              </div>
-                            )}
-                            {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                  <Shield className="h-3.5 w-3.5 text-purple-400" />IAB Advertising Standards
-                                </h4>
-                                <div className="space-y-3">
-                                  {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").map((cs: any, idx: number) => (
-                                    <ComplianceCategoryCard key={idx} category={cs} />
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </>
-                    )}
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </AiAccordion>
                   </>
+                )}
+
+                {/* Gemini section shown for video ads even when no other AI analysis exists */}
+                {ad.format === "video" && !aiAnalysis && ad.status !== "ai_screening" && (
+                  <GeminiSection
+                    analysis={geminiAnalysis}
+                    isRunning={geminiRunning}
+                    onRun={() => runGeminiAnalysis.mutate({ adId })}
+                    isPending={runGeminiAnalysis.isPending}
+                  />
                 )}
               </div>
             </TabsContent>
@@ -1236,6 +1287,36 @@ export default function AdDetail() {
 
         {/* Sidebar */}
         <div className="space-y-4">
+          {/* Clearance Score */}
+          {aiAnalysis && ad.status !== "ai_screening" && !aiAnalysisError && (
+            <Card className="bg-card border-border">
+              <CardContent className="p-4 text-center">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Clearance Score</p>
+                <p className={`text-6xl font-black leading-none tabular-nums ${
+                  clearanceScore >= 80 ? "text-green-400" :
+                  clearanceScore >= 50 ? "text-yellow-400" :
+                  "text-red-400"
+                }`}>{clearanceScore}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">/ 100</p>
+                {aiAnalysis.routingDecision && (
+                  <div className="mt-3">
+                    <Badge className={`text-xs ${
+                      aiAnalysis.routingDecision === "auto_approve"
+                        ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                        : aiAnalysis.routingDecision === "auto_reject"
+                        ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                        : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                    }`}>
+                      {aiAnalysis.routingDecision === "auto_approve" ? "Auto-Approved" :
+                       aiAnalysis.routingDecision === "auto_reject" ? "Auto-Rejected" :
+                       "Routed to Review"}
+                    </Badge>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Approval Chain Progress */}
           {ad.approvalSteps && (ad.approvalSteps as any[]).length > 0 && (() => {
             const steps = ad.approvalSteps as any[];
@@ -1333,61 +1414,6 @@ export default function AdDetail() {
             </CardContent>
           </Card>
 
-          {/* AI Assistant — moderator brief auto-generated by Run AI Review */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" />
-                Moderator Brief
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {aiAnalysis?.moderatorBrief ? (
-                <p className="text-sm leading-relaxed">{aiAnalysis.moderatorBrief}</p>
-              ) : ad.status === "ai_screening" ? (
-                <p className="text-sm text-muted-foreground">Generating…</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">Run AI Review to generate a moderator brief.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Frame Analysis Quick View */}
-          {frameAnalysis && frameAnalysis.status === "completed" && (
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Film className="h-4 w-4 text-primary" />
-                  Frame Analysis
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Frames</span>
-                  <span className="font-medium">{frameAnalysis.totalFramesAnalyzed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Video Score</span>
-                  <span className={`font-medium ${(frameAnalysis.overallVideoScore ?? 0) >= 80 ? "text-green-400" : (frameAnalysis.overallVideoScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                    {frameAnalysis.overallVideoScore}/100
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Flagged</span>
-                  <span className={`font-medium ${frameAnalysis.flaggedFrameCount === 0 ? "text-green-400" : "text-red-400"}`}>
-                    {frameAnalysis.flaggedFrameCount}
-                  </span>
-                </div>
-                {frameAnalysis.worstTimestamp && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Worst At</span>
-                    <span className="font-medium text-red-400">{frameAnalysis.worstTimestamp}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
           {/* Info */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
@@ -1402,8 +1428,7 @@ export default function AdDetail() {
                 "Upload"
               } />
               <InfoRow label="Priority" value={ad.priority} />
-              <InfoRow label="AI Score" value={ad.aiScore !== null ? `${ad.aiScore}/100` : "—"} />
-              <InfoRow label="Brand Safety" value={ad.brandSafetyScore !== null ? `${ad.brandSafetyScore}/100` : "—"} />
+              <InfoRow label="Clearance" value={ad.aiScore !== null ? `${ad.aiScore}/100` : "—"} />
               <InfoRow label="Created" value={new Date(ad.createdAt).toLocaleDateString()} />
             </CardContent>
           </Card>
@@ -1532,6 +1557,230 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium capitalize">{value}</span>
     </div>
+  );
+}
+
+// ─── AI Accordion ────────────────────────────────────────────────────────────
+
+function AiAccordion({ title, icon, badge, children, defaultOpen = false }: {
+  title: string;
+  icon: ReactNode;
+  badge?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="bg-card border-border">
+      <button className="w-full text-left" onClick={() => setOpen(!open)}>
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-primary">{icon}</span>
+            <span className="text-sm font-semibold">{title}</span>
+            {badge}
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+      {open && (
+        <CardContent className="px-4 pb-4 pt-0">
+          <div className="border-t border-border/50 pt-4">
+            {children}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// ─── Gemini Native Analysis Section ─────────────────────────────────────────
+
+function GeminiSection({ analysis, isRunning, onRun, isPending }: {
+  analysis: any;
+  isRunning: boolean;
+  onRun: () => void;
+  isPending: boolean;
+}) {
+  if (isRunning) {
+    return (
+      <Card className="bg-card border-border">
+        <CardContent className="p-8 text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-3" />
+          <h3 className="font-semibold mb-1">Gemini Analysis In Progress</h3>
+          <p className="text-sm text-muted-foreground">
+            Gemini 2.5 Pro is reading the raw video and audio stream — listening for spoken disclaimers,
+            audio violations, and temporal patterns that frame sampling misses. This takes 1–3 minutes.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <Card className="bg-card border-border">
+        <CardContent className="p-6 text-center">
+          <Sparkles className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <h3 className="font-semibold mb-1">Gemini Native Video Analysis</h3>
+          <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+            Gemini 2.5 Pro processes the raw video+audio stream natively — no frame sampling.
+            It catches spoken disclaimers, audio loudness violations (CALM Act), profanity,
+            and temporal context that the frame pipeline misses.
+          </p>
+          <Button size="sm" variant="outline" onClick={onRun} disabled={isPending}>
+            {isPending
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+            Run Gemini Analysis
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const findings: any[] = analysis.findings ?? [];
+  const blockingCount = findings.filter((f: any) => f.severity === "blocking").length;
+  const criticalCount = findings.filter((f: any) => f.severity === "critical").length;
+  const warningCount = findings.filter((f: any) => f.severity === "warning").length;
+
+  return (
+    <AiAccordion
+      title="Gemini Native Analysis"
+      icon={<Sparkles className="h-4 w-4" />}
+      defaultOpen={blockingCount > 0 || criticalCount > 0}
+      badge={
+        blockingCount > 0 || criticalCount > 0
+          ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{blockingCount + criticalCount} critical</Badge>
+          : warningCount > 0
+          ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">{warningCount} warning{warningCount !== 1 ? "s" : ""}</Badge>
+          : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>
+      }
+    >
+      <div className="space-y-4">
+        {/* FCC / IAB scores */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border p-4 text-center">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
+            <p className={`text-3xl font-bold ${
+              analysis.overallFccScore >= 80 ? "text-green-400" :
+              analysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"
+            }`}>{analysis.overallFccScore}</p>
+            <p className="text-[10px] text-muted-foreground">/ 100 · Gemini</p>
+          </div>
+          <div className="rounded-lg border border-border p-4 text-center">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
+            <p className={`text-3xl font-bold ${
+              analysis.overallIabScore >= 80 ? "text-green-400" :
+              analysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"
+            }`}>{analysis.overallIabScore}</p>
+            <p className="text-[10px] text-muted-foreground">/ 100 · Gemini</p>
+          </div>
+        </div>
+
+        {/* Summary */}
+        {analysis.complianceSummary && (
+          <div className="p-3 rounded-lg bg-background border border-border/50">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Analysis Summary</p>
+            <p className="text-sm">{analysis.complianceSummary}</p>
+          </div>
+        )}
+
+        {/* Audio violations */}
+        {analysis.audioViolations?.length > 0 && (
+          <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Music className="h-3.5 w-3.5 text-yellow-400" />
+              <p className="text-[11px] uppercase tracking-wider text-yellow-400 font-semibold">Audio Violations</p>
+            </div>
+            <div className="space-y-1">
+              {analysis.audioViolations.map((v: string, i: number) => (
+                <p key={i} className="text-sm text-muted-foreground">• {v}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Required actions */}
+        {analysis.requiredActions?.length > 0 && (
+          <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+            <p className="text-[11px] uppercase tracking-wider text-red-400 font-semibold mb-2">Required Actions Before Airing</p>
+            <div className="space-y-1.5">
+              {analysis.requiredActions.map((action: string, i: number) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-red-400 text-xs font-bold mt-0.5">{i + 1}.</span>
+                  <p className="text-sm">{action}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Findings list */}
+        {findings.length > 0 ? (
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Findings ({findings.length})
+            </h4>
+            <div className="space-y-2">
+              {findings.map((finding: any, i: number) => (
+                <div key={i} className={`p-3 rounded-lg border ${
+                  finding.severity === "blocking" ? "bg-red-500/5 border-red-500/30" :
+                  finding.severity === "critical" ? "bg-red-500/5 border-red-500/20" :
+                  finding.severity === "warning"  ? "bg-yellow-500/5 border-yellow-500/20" :
+                                                    "bg-blue-500/5 border-blue-500/20"
+                }`}>
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <SeverityIcon severity={finding.severity} />
+                      <span className="text-xs font-semibold">{finding.ruleName}</span>
+                      <Badge variant="outline" className="text-[9px] font-mono">{finding.ruleId}</Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {finding.timestampSeconds != null && (
+                        <Badge variant="outline" className="text-[10px] border-muted-foreground/30">
+                          <Clock className="h-2.5 w-2.5 mr-1" />
+                          {Math.floor(finding.timestampSeconds / 60)}:{String(Math.floor(finding.timestampSeconds % 60)).padStart(2, "0")}
+                        </Badge>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">{finding.confidence}%</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-1.5">{finding.description}</p>
+                  {finding.recommendation && (
+                    <p className="text-xs text-primary/80">→ {finding.recommendation}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-green-400 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+            <CircleCheck className="h-4 w-4" />
+            No compliance violations detected by Gemini.
+          </div>
+        )}
+
+        {/* Metadata footer */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground border-t border-border/50 pt-3">
+          <span>Model: {analysis.modelVersion}</span>
+          <span>·</span>
+          <span>Source: {analysis.sourceType?.replace("_", " ")}</span>
+          {analysis.analyzedAt && (
+            <>
+              <span>·</span>
+              <span>Analyzed: {new Date(analysis.analyzedAt).toLocaleDateString()}</span>
+            </>
+          )}
+          {analysis.durationMs && (
+            <>
+              <span>·</span>
+              <span>{(analysis.durationMs / 1000).toFixed(0)}s analysis time</span>
+            </>
+          )}
+        </div>
+      </div>
+    </AiAccordion>
   );
 }
 
