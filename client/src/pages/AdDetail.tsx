@@ -27,6 +27,7 @@ export default function AdDetail() {
   const utils = trpc.useUtils();
 
   const [geminiRunning, setGeminiRunning] = useState(false);
+  const [geminiAnalysisId, setGeminiAnalysisId] = useState<number | null>(null);
 
   // Poll while AI review is running, frame analysis is extracting, or Gemini analysis is in flight
   const { data: ad, isLoading } = trpc.ads.getById.useQuery(
@@ -35,7 +36,7 @@ export default function AdDetail() {
   );
   const { data: frameAnalysis, isLoading: frameLoading } = trpc.ads.getFrameAnalysis.useQuery(
     { adId },
-    { refetchInterval: (data: any) => data?.status === "running" ? 2500 : false }
+    { refetchInterval: (data: any) => (data?.status === "running" || geminiRunning) ? 2500 : false }
   );
   // For uploaded files, get a presigned URL so the browser can load them from private R2 storage
   const { data: signedUrlData } = trpc.ads.getSignedUrl.useQuery(
@@ -53,8 +54,9 @@ export default function AdDetail() {
     onError: (e) => toast.error(`AI Review failed: ${e.message}`),
   });
   const runGeminiAnalysis = trpc.ads.runGeminiAnalysis.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setGeminiRunning(true);
+      setGeminiAnalysisId(data.analysisId);
       utils.ads.getFrameAnalysis.invalidate({ adId });
       toast.info("Gemini analysis started — results will appear automatically");
     },
@@ -71,14 +73,32 @@ export default function AdDetail() {
   const [reviewComment, setReviewComment] = useState("");
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
 
-  // Stop polling once Gemini results appear in aiAnalysis
+  // Stop polling once Gemini results appear in aiAnalysis, or when the record fails
   const geminiAnalysis = (ad?.aiAnalysis as any)?.geminiAnalysis;
   useEffect(() => {
-    if (geminiRunning && geminiAnalysis) {
+    if (!geminiRunning) return;
+    if (geminiAnalysis) {
       setGeminiRunning(false);
+      setGeminiAnalysisId(null);
       toast.success("Gemini analysis complete");
+      return;
     }
-  }, [geminiAnalysis, geminiRunning]);
+    // Detect failure: the frameAnalysis record we started has transitioned to "failed"
+    if (
+      frameAnalysis &&
+      (geminiAnalysisId === null || (frameAnalysis as any).id === geminiAnalysisId) &&
+      (frameAnalysis as any).status === "failed"
+    ) {
+      setGeminiRunning(false);
+      setGeminiAnalysisId(null);
+      const summary: string = (frameAnalysis as any).summary ?? "";
+      // Extract a short human-readable reason from the summary
+      const reason = summary.includes("429") || summary.includes("quota")
+        ? "Gemini quota exceeded — enable billing at aistudio.google.com"
+        : summary.replace("Gemini analysis failed: ", "").slice(0, 120);
+      toast.error(`Gemini analysis failed: ${reason}`);
+    }
+  }, [geminiAnalysis, geminiRunning, frameAnalysis, geminiAnalysisId]);
 
   if (isLoading) {
     return (
