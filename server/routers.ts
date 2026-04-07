@@ -9,6 +9,7 @@ import { analyzeAdContent, generateModerationSuggestion } from "./aiModeration";
 import { parseVideoUrl, detectVideoProvider, isVideoUrl } from "./videoUrlParser";
 import { runFrameAnalysis } from "./frameAnalysis";
 import { runUnifiedAiReview } from "./aiReviewPipeline";
+import { analyzeVideoWithGemini } from "./geminiVideoAnalysis";
 import { getDefaultPolicySeedData } from "./complianceFrameworks";
 import { nanoid } from "nanoid";
 
@@ -134,7 +135,7 @@ async function performAutoAnalysis(adId: number, triggeredByUserId: number): Pro
     });
 
     await db.updateAdSubmission(adId, {
-      aiScore: result.overallScore,
+      aiScore: result.clearanceScore,
       brandSafetyScore: result.brandSafetyScore,
       aiAnalysis: result as any,
     });
@@ -148,6 +149,7 @@ async function performAutoAnalysis(adId: number, triggeredByUserId: number): Pro
       entityType: "ad_submission",
       entityId: adId,
       details: {
+        clearanceScore: result.clearanceScore,
         routingDecision: result.routingDecision,
         routingReason: result.routingReason,
         routingConfidence: result.routingConfidence,
@@ -551,7 +553,7 @@ export const appRouter = router({
             });
 
             await db.updateAdSubmission(adId, {
-              aiScore: result.overallScore,
+              aiScore: result.clearanceScore,
               brandSafetyScore: result.brandSafetyScore,
               aiAnalysis: result as any,
             });
@@ -565,6 +567,7 @@ export const appRouter = router({
               entityType: "ad_submission",
               entityId: adId,
               details: {
+                clearanceScore: result.clearanceScore,
                 routingDecision: result.routingDecision,
                 routingReason: result.routingReason,
                 routingConfidence: result.routingConfidence,
@@ -1279,6 +1282,145 @@ export const appRouter = router({
       .input(z.object({ adId: z.number() }))
       .query(async ({ input }) => {
         return db.getFrameAnalysesForAd(input.adId);
+      }),
+
+    // ── Gemini Native Video Analysis ─────────────────────────────────────────
+    // Sends the raw video (or YouTube URL) to Gemini 2.5 Pro for multimodal
+    // compliance analysis. Catches audio violations, spoken disclaimer issues,
+    // and temporal patterns that frame sampling misses.
+    // Results are stored alongside (not replacing) any existing aiAnalysis data.
+    runGeminiAnalysis: moderatorProcedure
+      .input(z.object({ adId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const ad = await db.getAdSubmissionById(input.adId);
+        if (!ad) throw new Error("Ad not found");
+        if (ad.format !== "video") {
+          throw new Error("Gemini analysis is only available for video ads");
+        }
+
+        // Create a frame-analysis record so the client can poll for completion
+        // via ads.getFrameAnalysis — totalFramesAnalyzed will be 0 (no discrete frames)
+        const analysisId = await db.createFrameAnalysis({
+          adSubmissionId: input.adId,
+          status: "running",
+          triggeredBy: ctx.user.id,
+          startedAt: new Date(),
+        });
+
+        const userId = ctx.user.id;
+        const adId = input.adId;
+        const adTitle = ad.title;
+
+        setImmediate(async () => {
+          try {
+            const result = await analyzeVideoWithGemini({
+              fileKey: ad.fileKey,
+              sourceUrl: ad.sourceUrl || ad.fileUrl,
+              videoProvider: ad.videoProvider,
+              mimeType: ad.fileMimeType,
+              adTitle,
+            });
+
+            const findingCount = result.findings.length;
+            const overallScore = Math.round(
+              (result.overallFccScore + result.overallIabScore) / 2,
+            );
+            const worstFinding = result.findings.find(
+              f => f.severity === "blocking" || f.severity === "critical",
+            );
+
+            await db.updateFrameAnalysis(analysisId, {
+              // Gemini processes natively — no discrete frame count
+              totalFramesAnalyzed: 0,
+              analysisIntervalSeconds: 0,
+              overallVideoScore: overallScore,
+              flaggedFrameCount: findingCount,
+              frames: result.findings as any,
+              summary: result.complianceSummary,
+              worstTimestamp: worstFinding?.timestampSeconds != null
+                ? String(worstFinding.timestampSeconds)
+                : null,
+              worstIssue: worstFinding?.description ?? null,
+              status: "completed",
+              completedAt: new Date(),
+            });
+
+            // Merge Gemini results into aiAnalysis without clobbering existing data
+            const freshAd = await db.getAdSubmissionById(adId);
+            const existingAnalysis =
+              (freshAd?.aiAnalysis as Record<string, unknown>) ?? {};
+            await db.updateAdSubmission(adId, {
+              aiAnalysis: {
+                ...existingAnalysis,
+                geminiAnalysis: result,
+                geminiScore: overallScore,
+              } as any,
+            });
+
+            // Record blocking/critical findings as policy violations
+            const activePolicies = await db.getPolicies(true);
+            for (const finding of result.findings) {
+              if (finding.severity !== "blocking" && finding.severity !== "critical") continue;
+              const matchingPolicy = activePolicies.find(p =>
+                p.name.toLowerCase().includes(finding.ruleName.toLowerCase())
+              );
+              await db.createPolicyViolation({
+                adSubmissionId: adId,
+                policyId: matchingPolicy?.id ?? null,
+                severity: finding.severity === "blocking" ? "critical" : finding.severity,
+                description: `[Gemini${finding.timestampSeconds != null ? ` @${finding.timestampSeconds}s` : ""}] ${finding.description}`,
+                detectedBy: "ai",
+              });
+            }
+
+            await db.createAuditEntry({
+              userId,
+              action: "gemini_analysis_complete",
+              entityType: "ad_submission",
+              entityId: adId,
+              details: {
+                fccScore: result.overallFccScore,
+                iabScore: result.overallIabScore,
+                findingCount,
+                blockingCount: result.findings.filter(f => f.severity === "blocking").length,
+                criticalCount: result.findings.filter(f => f.severity === "critical").length,
+                sourceType: result.sourceType,
+                durationMs: result.durationMs,
+              },
+            });
+
+            await db.createNotification({
+              userId,
+              type: "ai_screening_complete",
+              title: "Gemini Analysis Complete",
+              message:
+                `Gemini analysis of "${adTitle}" complete. ` +
+                `FCC: ${result.overallFccScore}/100, IAB: ${result.overallIabScore}/100. ` +
+                `${findingCount} finding${findingCount !== 1 ? "s" : ""}.`,
+              relatedAdId: adId,
+            });
+
+          } catch (err) {
+            const errorMessage = (err as Error)?.message ?? "Unknown error";
+            console.error(`[runGeminiAnalysis] Failed for ad ${adId}: ${errorMessage}`);
+
+            await db.updateFrameAnalysis(analysisId, {
+              status: "failed",
+              summary: `Gemini analysis failed: ${errorMessage}`,
+              completedAt: new Date(),
+            }).catch(() => {});
+
+            await db.createNotification({
+              userId,
+              type: "ai_screening_complete",
+              title: "Gemini Analysis Failed",
+              message: `Gemini analysis of "${adTitle}" failed: ${errorMessage}`,
+              relatedAdId: adId,
+            }).catch(() => {});
+          }
+        });
+
+        return { analysisId, status: "running" as const };
       }),
   }),
 

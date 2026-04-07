@@ -15,6 +15,7 @@ export const ENV = {
   llmProvider: process.env.LLM_PROVIDER ?? "openai",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 
   // S3
   s3Bucket: process.env.S3_BUCKET ?? "admod-uploads",
