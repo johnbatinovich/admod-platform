@@ -511,14 +511,14 @@ import {
  */
 /**
  * Derive a sensible default frame interval from video duration.
- * - < 60s  → every 5s  (~6 frames for a 30s ad)
- * - 60-300s → every 10s
- * - > 300s  → every 15s
+ * - < 120s  → every 1s  (1fps — up to 120 frames, covers broadcast spots in full detail)
+ * - 120-300s → every 2s
+ * - > 300s  → every 5s
  */
 function defaultIntervalForDuration(durationSeconds: number): number {
-  if (durationSeconds < 60) return 5;
-  if (durationSeconds <= 300) return 10;
-  return 15;
+  if (durationSeconds < 120) return 1;
+  if (durationSeconds <= 300) return 2;
+  return 5;
 }
 
 export async function runFrameAnalysis(

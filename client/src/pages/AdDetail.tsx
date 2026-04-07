@@ -933,6 +933,14 @@ export default function AdDetail() {
                       />
                     )}
 
+                    {/* ── TIER 3e: Whisper Transcript ───────────────────── */}
+                    {ad.format === "video" && (aiAnalysis as any)?.whisperTranscript && (
+                      <WhisperTranscriptSection
+                        transcript={(aiAnalysis as any).whisperTranscript}
+                        findings={(aiAnalysis as any)?.geminiAnalysis?.findings ?? []}
+                      />
+                    )}
+
                     {/* ── TIER 3c: Content Intelligence ─────────────────── */}
                     <AiAccordion
                       title="Content Intelligence"
@@ -1205,6 +1213,14 @@ export default function AdDetail() {
                     isRunning={geminiRunning}
                     onRun={() => runGeminiAnalysis.mutate({ adId })}
                     isPending={runGeminiAnalysis.isPending}
+                  />
+                )}
+
+                {/* Whisper transcript shown standalone when no full AI analysis exists */}
+                {ad.format === "video" && !aiAnalysis && (ad?.aiAnalysis as any)?.whisperTranscript && (
+                  <WhisperTranscriptSection
+                    transcript={(ad.aiAnalysis as any).whisperTranscript}
+                    findings={[]}
                   />
                 )}
               </div>
@@ -1894,6 +1910,69 @@ function TranscriptViewer({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Standalone Whisper Transcript Section ────────────────────────────────────
+
+function WhisperTranscriptSection({
+  transcript,
+  findings,
+}: {
+  transcript: { segments: { start: number; end: number; text: string }[]; fullText: string; language: string; durationSeconds: number };
+  findings: any[];
+}) {
+  const flaggedSeconds = new Set<number>();
+  for (const f of findings) {
+    if (f.timestampSeconds != null) {
+      for (let i = -2; i <= 2; i++) flaggedSeconds.add(Math.round(f.timestampSeconds) + i);
+    }
+  }
+
+  function isSegmentFlagged(seg: { start: number; end: number }): boolean {
+    for (let t = Math.floor(seg.start); t <= Math.ceil(seg.end); t++) {
+      if (flaggedSeconds.has(t)) return true;
+    }
+    return false;
+  }
+
+  return (
+    <AiAccordion
+      title="Whisper Transcript"
+      icon={<Languages className="h-4 w-4" />}
+      badge={
+        <Badge variant="outline" className="text-[9px] ml-2">
+          {transcript.segments.length} segments · {transcript.language} · {formatTime(transcript.durationSeconds)}
+        </Badge>
+      }
+    >
+      <div className="space-y-3">
+        <div className="max-h-80 overflow-y-auto space-y-0.5 rounded-lg border border-border/50 bg-background/50 p-2">
+          {transcript.segments.map((seg, i) => {
+            const flagged = isSegmentFlagged(seg);
+            return (
+              <div
+                key={i}
+                className={`flex gap-2.5 rounded px-2 py-1 text-xs leading-relaxed ${
+                  flagged ? "bg-yellow-500/10 border border-yellow-500/25" : "hover:bg-muted/40"
+                }`}
+              >
+                <span className={`shrink-0 font-mono text-[10px] mt-0.5 w-10 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
+                  {formatTime(seg.start)}
+                </span>
+                <span className={flagged ? "text-yellow-100" : ""}>{seg.text}</span>
+              </div>
+            );
+          })}
+        </div>
+        {findings.some((f) => f.timestampSeconds != null) && (
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-500/40 border border-yellow-500/50" />
+            Highlighted segments overlap with Gemini violation timestamps
+          </p>
+        )}
+      </div>
+    </AiAccordion>
   );
 }
 

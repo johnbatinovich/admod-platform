@@ -10,6 +10,7 @@ import { parseVideoUrl, detectVideoProvider, isVideoUrl } from "./videoUrlParser
 import { runFrameAnalysis } from "./frameAnalysis";
 import { runUnifiedAiReview } from "./aiReviewPipeline";
 import { analyzeVideoWithGemini } from "./geminiVideoAnalysis";
+import { transcribeVideoAudio } from "./whisperTranscription";
 import { getDefaultPolicySeedData } from "./complianceFrameworks";
 import { nanoid } from "nanoid";
 
@@ -1312,14 +1313,28 @@ export const appRouter = router({
         const adTitle = ad.title;
 
         setImmediate(async () => {
+          // Run Whisper in parallel with Gemini — saves transcript even if Gemini fails
+          const whisperInput = ad.videoProvider !== "youtube" && ad.fileKey
+            ? { fileKey: ad.fileKey, adTitle }
+            : null;
+          const whisperPromise = whisperInput
+            ? transcribeVideoAudio(whisperInput).catch((err: Error) => {
+                console.warn(`[Whisper] Transcription failed (non-fatal): ${err.message}`);
+                return null;
+              })
+            : Promise.resolve(null);
+
           try {
-            const result = await analyzeVideoWithGemini({
-              fileKey: ad.fileKey,
-              sourceUrl: ad.sourceUrl || ad.fileUrl,
-              videoProvider: ad.videoProvider,
-              mimeType: ad.fileMimeType,
-              adTitle,
-            });
+            const [result, transcript] = await Promise.all([
+              analyzeVideoWithGemini({
+                fileKey: ad.fileKey,
+                sourceUrl: ad.sourceUrl || ad.fileUrl,
+                videoProvider: ad.videoProvider,
+                mimeType: ad.fileMimeType,
+                adTitle,
+              }),
+              whisperPromise,
+            ]);
 
             const findingCount = result.findings.length;
             const overallScore = Math.round(
@@ -1345,7 +1360,7 @@ export const appRouter = router({
               completedAt: new Date(),
             });
 
-            // Merge Gemini results into aiAnalysis without clobbering existing data
+            // Merge Gemini + Whisper results into aiAnalysis without clobbering existing data
             const freshAd = await db.getAdSubmissionById(adId);
             const existingAnalysis =
               (freshAd?.aiAnalysis as Record<string, unknown>) ?? {};
@@ -1354,6 +1369,7 @@ export const appRouter = router({
                 ...existingAnalysis,
                 geminiAnalysis: result,
                 geminiScore: overallScore,
+                ...(transcript ? { whisperTranscript: transcript } : {}),
               } as any,
             });
 
@@ -1409,6 +1425,17 @@ export const appRouter = router({
               summary: `Gemini analysis failed: ${errorMessage}`,
               completedAt: new Date(),
             }).catch(() => {});
+
+            // Save Whisper transcript even when Gemini fails
+            const transcriptOnFailure = await whisperPromise;
+            if (transcriptOnFailure) {
+              const freshAd = await db.getAdSubmissionById(adId).catch(() => null);
+              const existingAnalysis = (freshAd?.aiAnalysis as Record<string, unknown>) ?? {};
+              await db.updateAdSubmission(adId, {
+                aiAnalysis: { ...existingAnalysis, whisperTranscript: transcriptOnFailure } as any,
+              }).catch(() => {});
+              console.log(`[Whisper] Transcript saved to ad ${adId} despite Gemini failure`);
+            }
 
             await db.createNotification({
               userId,
