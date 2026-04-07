@@ -10,7 +10,7 @@
  * for AI vision analysis.
  */
 
-import { execFile, exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
@@ -18,7 +18,6 @@ import { storagePut, storageGetSignedUrl, storageDownloadBuffer } from "./storag
 import { nanoid } from "nanoid";
 
 const execFileAsync = promisify(execFile);
-const execAsync = promisify(exec);
 
 // ─── Configuration ──────────────────────────────────────────────────────
 
@@ -251,7 +250,7 @@ export async function extractFramesFromFile(
  */
 async function isYtDlpAvailable(): Promise<boolean> {
   try {
-    await execAsync("which yt-dlp");
+    await execFileAsync("which", ["yt-dlp"]);
     return true;
   } catch {
     return false;
@@ -290,9 +289,15 @@ export async function downloadVideo(
   console.log(`[FrameExtraction] yt-dlp downloading: ${url}`);
   const t2 = Date.now();
   try {
-    const ytdlpCmd = `yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist --socket-timeout 30 --max-filesize 500M -o "${outputPath}" "${url}"`;
-    console.log(`[FrameExtraction] yt-dlp command: ${ytdlpCmd}`);
-    await execAsync(ytdlpCmd, { timeout: 180_000 });
+    await execFileAsync("yt-dlp", [
+      "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+      "--merge-output-format", "mp4",
+      "--no-playlist",
+      "--socket-timeout", "30",
+      "--max-filesize", "500M",
+      "-o", outputPath,
+      url,
+    ], { timeout: 180_000 });
     console.log(`[FrameExtraction] yt-dlp done in ${Date.now() - t2}ms`);
   } catch (err: any) {
     console.error(`[FrameExtraction] yt-dlp failed after ${Date.now() - t2}ms: ${err.message}`);
