@@ -6,6 +6,8 @@ import {
 } from "./aiModeration";
 import { runFrameAnalysis, type FrameFinding, type FrameAnalysisResult } from "./frameAnalysis";
 import { FCC_FRAMEWORK, IAB_FRAMEWORK } from "./complianceFrameworks";
+import { extractEvidence, type ExtractedEvidence } from "./evidenceExtractor";
+import { evaluateRules, summarizeFindings, type RuleFinding } from "./rulesEngine";
 import type { Policy, AdSubmission } from "../drizzle/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,12 +36,17 @@ export interface UnifiedReviewResult extends AiAnalysisResult {
   moderatorBrief: string;
   // Pipeline metadata
   deepAnalysisTriggered: boolean;
+  // Single synthesised score — the ONE number shown to reviewers
+  clearanceScore: number;
   // Agentic routing decision (from Stage 3)
   routingDecision: AgentRoutingDecision;
   routingReason: string;
   routingConfidence: number;
   stagesCompleted: number[];
   skippedDeepAnalysis: boolean;
+  // Phase 2: deterministic policy evaluation
+  evidence: ExtractedEvidence[];
+  policyFindings: RuleFinding[];
 }
 
 export type ReviewStage =
@@ -177,6 +184,30 @@ function buildSkippedComplianceScores(): ComplianceCategoryScore[] {
   ];
 }
 
+/**
+ * Single synthesised clearance score — the one number shown to reviewers.
+ *
+ * Formula:
+ *  1. Start with min(overallScore, overallVideoScore) — most conservative of the two.
+ *  2. If any compliance category failed, cap at 49 (amber/red boundary).
+ *  3. If any compliance category warned and score is above 79, cap at 79.
+ */
+function computeClearanceScore(
+  overallScore: number,
+  overallVideoScore: number | null,
+  complianceScores: ComplianceCategoryScore[] | undefined,
+): number {
+  let score = Math.min(overallScore, overallVideoScore ?? overallScore);
+  if (complianceScores) {
+    if (complianceScores.some(c => c.status === "fail")) {
+      score = Math.min(score, 49);
+    } else if (complianceScores.some(c => c.status === "warning") && score > 79) {
+      score = 79;
+    }
+  }
+  return Math.round(score);
+}
+
 // ─── Main Pipeline ────────────────────────────────────────────────────────────
 
 /**
@@ -268,6 +299,21 @@ export async function runUnifiedAiReview(
     );
   }
 
+  // ─── Phase 2: Deterministic policy evaluation ────────────────────────────
+  // Extract structured evidence from all AI outputs, then run the rules engine.
+  // This is deterministic — no LLM calls. Re-runnable on existing evidence.
+  const evidence = extractEvidence({
+    aiModerationResult: aiResult ?? undefined,
+    frameResult: stage1Result ?? undefined,
+  });
+  const policyFindings = evaluateRules(evidence);
+  const { failCount, warningCount, blockingViolations } = summarizeFindings(policyFindings);
+  console.log(
+    `[UnifiedReview] Phase 2 complete: evidence=${evidence.length} ` +
+    `policy_findings=${policyFindings.length} fails=${failCount} warnings=${warningCount} ` +
+    `blocking=${blockingViolations.join(",") || "none"}`,
+  );
+
   // ─── Stage 3: Decision & Report ─────────────────────────────────────────
   await onStageChange("stage3_running");
   stagesRun.push(3);
@@ -320,7 +366,12 @@ export async function runUnifiedAiReview(
     baseResult.violations.map(v => ({ description: v.description, severity: v.severity })),
   );
 
-  // Compute agentic routing decision based on confidence + recommendation
+  // Compute clearance score and routing decision
+  const clearanceScore = computeClearanceScore(
+    baseResult.overallScore,
+    stage1Result?.overallVideoScore ?? null,
+    baseResult.complianceScores,
+  );
   const routing = computeRoutingDecision(baseResult, runDeep, stagesRun);
   console.log(
     `[UnifiedReview] Stage 3 complete — routing=${routing.decision} ` +
@@ -342,11 +393,16 @@ export async function runUnifiedAiReview(
     moderatorBrief,
     // Metadata
     deepAnalysisTriggered: runDeep,
+    // Single synthesised score
+    clearanceScore,
     // Agentic routing
     routingDecision: routing.decision,
     routingReason: routing.reason,
     routingConfidence: routing.confidence,
     stagesCompleted: routing.stagesCompleted,
     skippedDeepAnalysis: routing.skippedDeepAnalysis,
+    // Phase 2 deterministic policy evaluation
+    evidence,
+    policyFindings,
   };
 }

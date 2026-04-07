@@ -984,6 +984,11 @@ export default function AdDetail() {
                       />
                     )}
 
+                    {/* ── TIER 3f: Policy Findings (deterministic rules engine) ── */}
+                    {Array.isArray(aiAnalysis.policyFindings) && aiAnalysis.policyFindings.length > 0 && (
+                      <PolicyFindingsSection findings={aiAnalysis.policyFindings} />
+                    )}
+
                     {/* ── TIER 3c: Content Intelligence ─────────────────── */}
                     <AiAccordion
                       title="Content Intelligence"
@@ -2014,6 +2019,100 @@ function WhisperTranscriptSection({
             Highlighted segments overlap with Gemini violation timestamps
           </p>
         )}
+      </div>
+    </AiAccordion>
+  );
+}
+
+// ─── Policy Findings Section (deterministic rules engine) ────────────────────
+
+type RuleFinding = {
+  ruleId: string;
+  ruleName: string;
+  framework: "FCC" | "IAB";
+  status: "pass" | "fail" | "warning" | "not_evaluated";
+  confidence: 100;
+  severity: "info" | "warning" | "critical" | "blocking";
+  description: string;
+  evidenceIds: string[];
+  recommendation?: string;
+};
+
+function PolicyFindingsSection({ findings }: { findings: RuleFinding[] }) {
+  const fails = findings.filter(f => f.status === "fail");
+  const warnings = findings.filter(f => f.status === "warning");
+  const passes = findings.filter(f => f.status === "pass");
+
+  const badge = fails.length > 0
+    ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{fails.length} violation{fails.length !== 1 ? "s" : ""}</Badge>
+    : warnings.length > 0
+    ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>
+    : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>;
+
+  return (
+    <AiAccordion
+      title="Policy Findings"
+      icon={<Shield className="h-4 w-4" />}
+      badge={badge}
+    >
+      <div className="space-y-2">
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pb-1">
+          <span className="inline-block w-2 h-2 rounded-full bg-blue-500/60" />
+          Deterministic policy evaluation — confidence 100%, no AI uncertainty
+        </p>
+
+        {[...fails, ...warnings, ...passes].map(finding => {
+          const isFail = finding.status === "fail";
+          const isWarn = finding.status === "warning";
+          const isPass = finding.status === "pass";
+
+          const rowColor = isFail
+            ? "border-red-500/25 bg-red-500/5"
+            : isWarn
+            ? "border-yellow-500/25 bg-yellow-500/5"
+            : "border-border/40 bg-background";
+
+          const statusIcon = isFail
+            ? <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+            : isWarn
+            ? <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0 mt-0.5" />
+            : <CheckCircle className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />;
+
+          const frameworkColor = finding.framework === "FCC"
+            ? "text-blue-400 border-blue-500/30"
+            : "text-purple-400 border-purple-500/30";
+
+          const severityColor = finding.severity === "blocking"
+            ? "text-red-400 border-red-500/30"
+            : finding.severity === "critical"
+            ? "text-orange-400 border-orange-500/30"
+            : "text-yellow-400 border-yellow-500/30";
+
+          return (
+            <div key={finding.ruleId} className={`rounded-lg border p-3 ${rowColor}`}>
+              <div className="flex items-start gap-2.5">
+                {statusIcon}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                    <span className="text-[11px] font-semibold text-foreground">{finding.ruleName}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 ${frameworkColor}`}>{finding.framework}</Badge>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 font-mono ${frameworkColor}`}>{finding.ruleId}</Badge>
+                    {(isFail || isWarn) && (
+                      <Badge variant="outline" className={`text-[9px] px-1.5 ${severityColor}`}>{finding.severity}</Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{finding.description}</p>
+                  {finding.recommendation && (
+                    <p className="text-[11px] text-yellow-300/80 mt-1.5 flex items-start gap-1">
+                      <span className="shrink-0 mt-0.5">→</span>
+                      {finding.recommendation}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </AiAccordion>
   );
