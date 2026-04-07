@@ -31,7 +31,7 @@ Server (Express + TypeScript)
 - **pnpm** 10+
 - **ffmpeg** and **ffprobe** (for frame extraction)
 - **yt-dlp** (for YouTube/Vimeo video download)
-- **PostgreSQL** 14+ (or Supabase, AWS RDS, Neon)
+- **PostgreSQL** 14+ — [Neon](https://neon.tech) (recommended), Supabase, AWS RDS, or local
 - **S3-compatible storage** (AWS S3, Cloudflare R2, MinIO)
 - **OpenAI API key** (GPT-4o for vision analysis) or **Anthropic API key**
 
@@ -74,10 +74,11 @@ See `.env.example` for all available options. The key settings:
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | PostgreSQL connection string (e.g. Neon `postgresql://...`) |
 | `JWT_SECRET` | Secret for signing session tokens |
+| `GEMINI_API_KEY` | Google AI Studio key for Gemini 2.5 Pro native video analysis |
 | `LLM_PROVIDER` | `openai` or `anthropic` |
-| `OPENAI_API_KEY` | For GPT-4o vision analysis |
+| `OPENAI_API_KEY` | For Whisper ASR and GPT-4o supplemental analysis |
 | `S3_ENDPOINT` | S3-compatible endpoint URL |
 | `S3_ACCESS_KEY_ID` | S3 access key |
 | `S3_SECRET_ACCESS_KEY` | S3 secret key |
