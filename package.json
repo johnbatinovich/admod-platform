@@ -49,6 +49,7 @@
     "@trpc/server": "^11.6.0",
     "@types/pg": "^8.20.0",
     "axios": "^1.12.0",
+    "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -106,7 +107,9 @@
       "tailwindcss>nanoid": "3.3.7"
     },
     "peerDependencyRules": {
-      "ignoreMissing": ["mysql2"]
+      "ignoreMissing": [
+        "mysql2"
+      ]
     }
   }
 }

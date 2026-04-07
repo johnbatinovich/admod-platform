@@ -1,18 +1,16 @@
 /**
- * Standalone Authentication
- * 
- * Simple JWT-based auth with email/password login.
- * Replaces Manus OAuth with self-contained auth that works anywhere.
- * 
+ * Authentication
+ *
+ * JWT-based auth with email/password login.
  * Supports:
- * - Email/password login
+ * - Email/password login (bcrypt-hashed passwords)
  * - JWT session tokens in httpOnly cookies
  * - Auto-creation of admin user on first boot
  * - Role-based access (viewer, reviewer, moderator, admin)
  */
 
 import { SignJWT, jwtVerify } from "jose";
-import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 import type { Request, Response, Express } from "express";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -22,12 +20,14 @@ import type { User } from "../../drizzle/schema";
 
 // ─── Password Hashing ───────────────────────────────────────────────────
 
-function hashPassword(password: string): string {
-  return createHash("sha256").update(password + ENV.jwtSecret).digest("hex");
+const BCRYPT_ROUNDS = 12;
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
-function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 // ─── JWT Session ────────────────────────────────────────────────────────
@@ -113,10 +113,8 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Check password (stored in openId field as hash for simplicity,
-      // or use a separate passwords table in production)
-      const passwordHash = hashPassword(password);
-      if (user.openId !== passwordHash) {
+      const passwordOk = await verifyPassword(password, user.openId);
+      if (!passwordOk) {
         res.status(401).json({ error: "Invalid email or password" });
         return;
       }
@@ -170,7 +168,7 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      const passwordHash = hashPassword(password);
+      const passwordHash = await hashPassword(password);
 
       await db.upsertUser({
         openId: passwordHash,
@@ -338,7 +336,7 @@ export async function bootstrapAdminUser(): Promise<void> {
       return;
     }
 
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
 
     await db.upsertUser({
       openId: passwordHash,
