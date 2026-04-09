@@ -145,16 +145,16 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 text-center">
-              <p className="text-2xl font-bold text-green-400">{autoStats?.autoApproved ?? 0}</p>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Auto-Approved</p>
+              <p className="text-2xl font-bold" style={{ color: "#15803d" }}>{autoStats?.autoApproved ?? 0}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Auto-Approved</p>
             </div>
             <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 p-3 text-center">
-              <p className="text-2xl font-bold text-yellow-400">{autoStats?.flaggedForReview ?? 0}</p>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Flagged for Review</p>
+              <p className="text-2xl font-bold" style={{ color: "#b45309" }}>{autoStats?.flaggedForReview ?? 0}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Flagged for Review</p>
             </div>
             <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 text-center">
-              <p className="text-2xl font-bold text-red-400">{autoStats?.autoRejected ?? 0}</p>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Auto-Rejected</p>
+              <p className="text-2xl font-bold" style={{ color: "#b91c1c" }}>{autoStats?.autoRejected ?? 0}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Auto-Rejected</p>
             </div>
           </div>
         </CardContent>
