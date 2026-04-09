@@ -640,49 +640,52 @@ export async function runFrameAnalysis(
         }));
       }
 
-      // Process in batches of 10 frames. No inter-batch delay — with adaptive intervals
-      // a 30s ad produces ~6 frames total (1 batch). Delay is added only on 429 retry.
+      // All batches are independent LLM calls — fire them all in parallel.
+      // Each batch analyses different frames and doesn't depend on any other batch's result.
       const batchSize = 10;
-      for (let i = 0; i < frameUrls.length; i += batchSize) {
+      const batchCtx = { title: ad.title, description: ad.description, targetAudience: ad.targetAudience };
+      const totalBatches = Math.ceil(frameUrls.length / batchSize);
+      console.log(`[FrameAnalysis] Launching ${totalBatches} batch(es) in parallel — ${frameUrls.length} frames total`);
 
+      const batchPromises = Array.from({ length: totalBatches }, (_, batchIndex) => {
+        const i = batchIndex * batchSize;
         const batch = frameUrls.slice(i, i + batchSize);
-        const batchCtx = { title: ad.title, description: ad.description, targetAudience: ad.targetAudience };
 
-        let batchResults: FrameFinding[];
-        try {
-          batchResults = await analyzeFrameBatch(batch, batchCtx, policies);
-        } catch (batchErr) {
-          const errMsg = batchErr instanceof Error ? batchErr.message : String(batchErr);
-          console.error(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1} failed: ${errMsg} — using fallback scores`);
-          batchResults = batch.map((frame, batchIdx) => ({
-            frameIndex: i + batchIdx,
-            timestampSeconds: frame.timestampSeconds,
-            timestampFormatted: formatTimestamp(frame.timestampSeconds),
-            thumbnailUrl: frame.url,
-            score: 50,
-            severity: "info" as const,
-            issues: [],
-            description: `Frame analysis failed: ${errMsg}`,
-          }));
-        }
+        return analyzeFrameBatch(batch, batchCtx, policies)
+          .then((batchResults): FrameFinding[] => {
+            // Enrich each result with the correct timestamp and S3 URL.
+            // S3 upload runs in the background; fall back to base64 URL if not yet available.
+            return batchResults.map((finding, batchIdx) => {
+              const sourceFrame = extractionResult!.frames[i + batchIdx];
+              const s3Url = sourceFrame?.url || "";
+              return {
+                ...finding,
+                thumbnailUrl: s3Url || finding.thumbnailUrl,
+                timestampSeconds: sourceFrame?.timestampSeconds ?? finding.timestampSeconds,
+                timestampFormatted: formatTimestamp(sourceFrame?.timestampSeconds ?? finding.timestampSeconds),
+              };
+            });
+          })
+          .catch((batchErr): FrameFinding[] => {
+            const errMsg = batchErr instanceof Error ? batchErr.message : String(batchErr);
+            console.error(`[FrameAnalysis] Batch ${batchIndex + 1} failed: ${errMsg} — using fallback scores`);
+            return batch.map((frame, batchIdx) => ({
+              frameIndex: i + batchIdx,
+              timestampSeconds: frame.timestampSeconds,
+              timestampFormatted: formatTimestamp(frame.timestampSeconds),
+              thumbnailUrl: frame.url,
+              score: 50,
+              severity: "info" as const,
+              issues: [],
+              description: `Frame analysis failed: ${errMsg}`,
+            }));
+          });
+      });
 
-        // Ensure each frame result has the correct timestamp.
-        // Use the S3 URL for thumbnailUrl only if it's already been populated
-        // (S3 upload may still be in progress); fall back to whatever the batch set.
-        const enrichedResults = batchResults.map((finding, batchIdx) => {
-          const sourceFrame = extractionResult!.frames[i + batchIdx];
-          const s3Url = sourceFrame?.url || "";
-          return {
-            ...finding,
-            thumbnailUrl: s3Url || finding.thumbnailUrl,
-            timestampSeconds: sourceFrame?.timestampSeconds ?? finding.timestampSeconds,
-            timestampFormatted: formatTimestamp(sourceFrame?.timestampSeconds ?? finding.timestampSeconds),
-          };
-        });
-
-        allFrames.push(...enrichedResults);
-        console.log(`[FrameAnalysis] Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(frameUrls.length / batchSize)} complete — ${allFrames.length}/${frameUrls.length} frames processed`);
-      }
+      // Wait for all batches, then flatten in order (batch 0 first, then batch 1, etc.)
+      const batchResults = await Promise.all(batchPromises);
+      allFrames = batchResults.flat();
+      console.log(`[FrameAnalysis] All ${totalBatches} batch(es) complete — ${allFrames.length} frames processed`);
 
       const probe = extractionResult.probe;
       summary = `Analyzed ${allFrames.length} frames from ${probe.durationSeconds.toFixed(1)}s video ` +

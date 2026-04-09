@@ -121,8 +121,40 @@ export default function AdDetail() {
   const aiAnalysis = ad.aiAnalysis as any;
   const aiAnalysisError = aiAnalysis?.error === true ? (aiAnalysis.errorMessage as string | undefined) : null;
   const reviewStage: string | undefined = ad.status === "ai_screening" ? aiAnalysis?.reviewStage : undefined;
-  const clearanceScore: number = aiAnalysis?.clearanceScore ?? ad.aiScore ?? 0;
+  const clearanceScore: number | null = aiAnalysis?.clearanceScore ?? null;
   const FormatIcon = { video: Video, image: Image, audio: Music, text: Type, rich_media: FileText }[ad.format] || FileText;
+
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
+  // Filter compliance categories to show only relevant ones by default.
+  // Always show: categories with findings, failed/warning categories, and categories
+  // that apply universally or match the detected advertiser's industry.
+  const filterRelevantCategories = (categories: any[]) => {
+    const industry = (aiAnalysis?.detectedAdvertiser?.industry ?? "").toLowerCase();
+    const contentCats = (aiAnalysis?.contentCategories ?? []).map((c: string) => c.toLowerCase());
+    const industryRelevance: Record<string, string[]> = {
+      "pharma": ["pharmaceutical", "health", "dtc", "disclosure", "content standards", "truthfulness", "deceptive", "substantiation"],
+      "alcohol": ["alcohol", "age", "content standards", "disclosure"],
+      "tobacco": ["tobacco", "content standards"],
+      "gambling": ["gambling", "gaming", "age", "disclosure"],
+      "financial": ["financial", "disclosure", "deceptive", "truthfulness"],
+      "political": ["political", "disclosure", "transparency"],
+      "automotive": ["disclosure", "truthfulness", "deceptive", "substantiation", "content standards"],
+    };
+    const relevantKeywords = Object.entries(industryRelevance)
+      .filter(([key]) => industry.includes(key) || contentCats.some((c: string) => c.includes(key)))
+      .flatMap(([, keywords]) => keywords);
+    const universal = ["obscenity", "indecency", "profanity", "children", "deceptive", "substantiation", "privacy", "accessibility", "brand safety", "content standards", "truthfulness"];
+    const relevant = categories.filter(cat => {
+      const name = (cat.categoryName ?? "").toLowerCase();
+      if (cat.findings?.length > 0) return true;
+      if (cat.status === "fail" || cat.status === "warning") return true;
+      if (relevantKeywords.some(kw => name.includes(kw))) return true;
+      if (universal.some(uc => name.includes(uc))) return true;
+      return false;
+    });
+    return { relevant, hiddenPassCount: categories.length - relevant.length };
+  };
 
   const handleReview = (decision: "approve" | "reject" | "request_changes" | "escalate") => {
     submitReview.mutate({ adSubmissionId: adId, decision, comments: reviewComment });
@@ -663,11 +695,15 @@ export default function AdDetail() {
                       <div className="flex items-start gap-5">
                         {/* Big clearance score */}
                         <div className="text-center shrink-0 min-w-[88px]">
-                          <p className={`text-7xl font-black leading-none tabular-nums ${
-                            clearanceScore >= 80 ? "text-green-600" :
-                            clearanceScore >= 50 ? "text-amber-600" :
-                            "text-red-600"
-                          }`}>{clearanceScore}</p>
+                          {clearanceScore !== null ? (
+                            <p className={`text-7xl font-black leading-none tabular-nums ${
+                              clearanceScore >= 80 ? "text-green-600" :
+                              clearanceScore >= 50 ? "text-amber-600" :
+                              "text-red-600"
+                            }`}>{clearanceScore}</p>
+                          ) : (
+                            <p className="text-7xl font-black leading-none text-muted-foreground/40">—</p>
+                          )}
                           <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1.5 font-semibold">Clearance</p>
                           {aiAnalysis.runNumber && (
                             <span className="text-[9px] text-muted-foreground/60 font-mono">Run #{aiAnalysis.runNumber}</span>
@@ -676,7 +712,12 @@ export default function AdDetail() {
                         {/* Routing details */}
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {aiAnalysis.routingDecision && (
+                            {aiAnalysis.skippedDeepAnalysis ? (
+                              <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Quick Scan Only — Run Full Analysis
+                              </Badge>
+                            ) : aiAnalysis.routingDecision && (
                               <Badge className={`text-xs px-2.5 py-0.5 ${
                                 aiAnalysis.routingDecision === "auto_approve"
                                   ? "bg-green-100 text-green-600 border border-green-300"
@@ -689,9 +730,6 @@ export default function AdDetail() {
                                  aiAnalysis.routingDecision === "auto_reject" ? "Auto-Rejected" :
                                  "Routed to Review"}
                               </Badge>
-                            )}
-                            {aiAnalysis.skippedDeepAnalysis && (
-                              <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600">Quick scan only</Badge>
                             )}
                             {aiAnalysis.isPoliticalAd && (
                               <Badge className="bg-orange-100 text-orange-600 border border-orange-300 text-[10px]">
@@ -751,10 +789,14 @@ export default function AdDetail() {
                                   Run #{aiAnalysis.previousRuns.length - i}
                                 </span>
                                 <span className={`text-lg font-bold tabular-nums ${
-                                  (run.clearanceScore ?? 0) >= 80 ? "text-green-600" :
-                                  (run.clearanceScore ?? 0) >= 50 ? "text-amber-600" : "text-red-600"
+                                  run.clearanceScore === null || run.clearanceScore === undefined
+                                    ? "text-muted-foreground/40"
+                                    : run.clearanceScore >= 80 ? "text-green-600"
+                                    : run.clearanceScore >= 50 ? "text-amber-600" : "text-red-600"
                                 }`}>{run.clearanceScore ?? "—"}</span>
-                                {run.routingDecision && (
+                                {run.skippedDeepAnalysis ? (
+                                  <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">Quick scan</Badge>
+                                ) : run.routingDecision && (
                                   <Badge variant="outline" className={`text-[9px] ${
                                     run.routingDecision === "auto_approve" ? "border-green-300 text-green-600" :
                                     run.routingDecision === "auto_reject"  ? "border-red-300 text-red-600" :
@@ -876,30 +918,66 @@ export default function AdDetail() {
                               </div>
                             </div>
                           )}
-                          {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <Shield className="h-3.5 w-3.5 text-blue-600" />FCC Broadcast Compliance
-                              </h4>
-                              <div className="space-y-3">
-                                {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").map((cs: any, idx: number) => (
-                                  <ComplianceCategoryCard key={idx} category={cs} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <Shield className="h-3.5 w-3.5 text-purple-700" />IAB Advertising Standards
-                              </h4>
-                              <div className="space-y-3">
-                                {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").map((cs: any, idx: number) => (
-                                  <ComplianceCategoryCard key={idx} category={cs} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {(() => {
+                            const allFcc = aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC");
+                            const allIab = aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB");
+                            const { relevant: relFcc } = filterRelevantCategories(allFcc);
+                            const { relevant: relIab, hiddenPassCount } = filterRelevantCategories(allIab);
+                            const shownFcc = showAllCategories ? allFcc : relFcc;
+                            const shownIab = showAllCategories ? allIab : relIab;
+                            const totalHidden = showAllCategories ? 0 : (allFcc.length - relFcc.length) + (allIab.length - relIab.length);
+                            return (
+                              <>
+                                {shownFcc.length > 0 && (
+                                  <div>
+                                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                      <Shield className="h-3.5 w-3.5 text-blue-600" />FCC Broadcast Compliance
+                                    </h4>
+                                    <div className="space-y-3">
+                                      {shownFcc.map((cs: any, idx: number) => (
+                                        <ComplianceCategoryCard key={idx} category={cs} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {shownIab.length > 0 && (
+                                  <div>
+                                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                      <Shield className="h-3.5 w-3.5 text-purple-700" />IAB Advertising Standards
+                                    </h4>
+                                    <div className="space-y-3">
+                                      {shownIab.map((cs: any, idx: number) => (
+                                        <ComplianceCategoryCard key={idx} category={cs} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {totalHidden > 0 && (
+                                  <div className="text-center pt-1">
+                                    <p className="text-xs text-muted-foreground mb-1.5">
+                                      {totalHidden} additional categor{totalHidden === 1 ? "y" : "ies"} passed and are not shown — not relevant to this ad's industry
+                                    </p>
+                                    <button
+                                      onClick={() => setShowAllCategories(true)}
+                                      className="text-xs text-primary underline underline-offset-2 hover:no-underline"
+                                    >
+                                      Show all {allFcc.length + allIab.length} categories
+                                    </button>
+                                  </div>
+                                )}
+                                {showAllCategories && (
+                                  <div className="text-center pt-1">
+                                    <button
+                                      onClick={() => setShowAllCategories(false)}
+                                      className="text-xs text-muted-foreground underline underline-offset-2 hover:no-underline"
+                                    >
+                                      Show relevant only
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </AiAccordion>
                     )}
@@ -1376,14 +1454,27 @@ export default function AdDetail() {
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Clearance Score</p>
-                <p className={`text-6xl font-black leading-none tabular-nums ${
-                  clearanceScore >= 80 ? "text-green-600" :
-                  clearanceScore >= 50 ? "text-amber-600" :
-                  "text-red-600"
-                }`}>{clearanceScore}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">/ 100</p>
-                {aiAnalysis.routingDecision && (
-                  <div className="mt-3">
+                {clearanceScore !== null ? (
+                  <>
+                    <p className={`text-6xl font-black leading-none tabular-nums ${
+                      clearanceScore >= 80 ? "text-green-600" :
+                      clearanceScore >= 50 ? "text-amber-600" :
+                      "text-red-600"
+                    }`}>{clearanceScore}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">/ 100</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-6xl font-black leading-none text-muted-foreground/40">—</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Pending deep analysis</p>
+                  </>
+                )}
+                <div className="mt-3">
+                  {aiAnalysis.skippedDeepAnalysis ? (
+                    <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50">
+                      Quick Scan Only
+                    </Badge>
+                  ) : aiAnalysis.routingDecision && (
                     <Badge className={`text-xs ${
                       aiAnalysis.routingDecision === "auto_approve"
                         ? "bg-green-100 text-green-600 border border-green-300"
@@ -1395,8 +1486,8 @@ export default function AdDetail() {
                        aiAnalysis.routingDecision === "auto_reject" ? "Auto-Rejected" :
                        "Routed to Review"}
                     </Badge>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}

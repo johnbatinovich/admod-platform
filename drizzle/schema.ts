@@ -9,6 +9,7 @@ import {
   bigint,
   boolean,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export type InsertUser = typeof users.$inferInsert;
 export const advertisers = pgTable("advertisers", {
   id:                 serial("id").primaryKey(),
   name:               varchar("name", { length: 255 }).notNull(),
+  normalizedName:     varchar("normalized_name", { length: 255 }),
   contactEmail:       varchar("contactEmail", { length: 320 }),
   contactPhone:       varchar("contactPhone", { length: 64 }),
   industry:           varchar("industry", { length: 128 }),
@@ -43,7 +45,9 @@ export const advertisers = pgTable("advertisers", {
   createdBy:          integer("createdBy"),
   createdAt:          timestamp("createdAt").defaultNow().notNull(),
   updatedAt:          timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("idx_advertisers_normalized_name").on(table.normalizedName),
+]);
 export type Advertiser = typeof advertisers.$inferSelect;
 export type InsertAdvertiser = typeof advertisers.$inferInsert;
 

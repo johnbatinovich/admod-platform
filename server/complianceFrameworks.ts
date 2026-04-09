@@ -715,6 +715,28 @@ export function generateCompliancePrompt(frameworks: ComplianceFramework[]): str
 }
 
 /**
+ * Generates a medium-detail prompt: rule IDs, names, severities, and descriptions,
+ * WITHOUT individual checkpoints. Saves ~4,000 tokens per call vs the full prompt
+ * while preserving all rule information the LLM needs for accurate scoring.
+ * Use for deep compliance analysis (aiModeration, geminiVideoAnalysis).
+ */
+export function generateMediumCompliancePrompt(frameworks: ComplianceFramework[]): string {
+  let prompt = "REGULATORY & INDUSTRY COMPLIANCE FRAMEWORKS:\n\n";
+  for (const fw of frameworks) {
+    prompt += `═══ ${fw.name} (${fw.shortName}) ═══\n`;
+    prompt += `${fw.description}\n\n`;
+    for (const cat of fw.categories) {
+      prompt += `── ${cat.name} (Weight: ${cat.weight}/100) ──\n`;
+      for (const rule of cat.rules) {
+        prompt += `  [${rule.id}] ${rule.name} (${rule.severity.toUpperCase()}): ${rule.description}\n`;
+      }
+      prompt += "\n";
+    }
+  }
+  return prompt;
+}
+
+/**
  * Generates a compact prompt for frame-level analysis — category names, rule IDs,
  * and one-line descriptions only. Saves ~40KB per LLM call vs the full prompt.
  */

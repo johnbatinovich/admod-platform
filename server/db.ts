@@ -108,6 +108,22 @@ export async function getAdvertiserById(id: number) {
   return result[0];
 }
 
+export async function getAdvertiserByNormalizedName(normalizedName: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(advertisers)
+    .where(eq(advertisers.normalizedName, normalizedName))
+    .limit(1);
+  return result[0];
+}
+
+export async function countAdvertisers(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ total: count() }).from(advertisers);
+  return Number(result[0]?.total ?? 0);
+}
+
 export async function updateAdvertiser(id: number, data: Partial<InsertAdvertiser>) {
   const db = await getDb();
   if (!db) return;

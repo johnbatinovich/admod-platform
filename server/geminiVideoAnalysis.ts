@@ -21,7 +21,7 @@ import { nanoid } from "nanoid";
 import {
   FCC_FRAMEWORK,
   IAB_FRAMEWORK,
-  generateCompliancePrompt,
+  generateMediumCompliancePrompt,
 } from "./complianceFrameworks";
 import { ENV } from "./_core/env";
 import { storageDownloadBuffer } from "./storage";
@@ -89,7 +89,7 @@ export interface GeminiAnalysisInput {
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
 function buildPrompt(): string {
-  const rulesSection = generateCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
+  const rulesSection = generateMediumCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
 
   return `You are an expert broadcast advertising compliance analyst with deep knowledge of FCC regulations, FTC rules, and IAB digital advertising standards.
 
@@ -221,9 +221,15 @@ export async function analyzeVideoWithGemini(
   const ai = getClient();
   const prompt = buildPrompt();
 
-  let fileUri: string;
+  /** Threshold below which we use inline base64 to skip the Files API entirely. */
+  const INLINE_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20 MB
+
+  let fileUri: string = "";
   let sourceType: GeminiAnalysisResult["sourceType"];
   let tempDir: string | null = null;
+  // For the inline path: store the buffer and mime type for generateContent.
+  let inlineBuffer: Buffer | null = null;
+  let inlineMimeType: string = mimeType;
 
   try {
     // ── Resolve video source ──────────────────────────────────────────────────
@@ -233,10 +239,9 @@ export async function analyzeVideoWithGemini(
       console.log(`[Gemini] YouTube direct mode: "${adTitle}" — ${sourceUrl}`);
       fileUri = sourceUrl;
       sourceType = "youtube";
-      // No local file for YouTube — Whisper transcription is skipped.
 
     } else if (fileKey) {
-      // Private S3/R2 file: download buffer → write temp → Files API upload
+      // Private S3/R2 file: download buffer, then choose inline vs Files API.
       console.log(`[Gemini] S3 download mode: "${adTitle}" — key=${fileKey}`);
       const buffer = await storageDownloadBuffer(fileKey);
       if (!buffer || buffer.length === 0) {
@@ -248,18 +253,27 @@ export async function analyzeVideoWithGemini(
           `(limit: ${MAX_FILE_BYTES / 1024 / 1024} MB)`,
         );
       }
-      tempDir = path.join(os.tmpdir(), `gemini-${nanoid(8)}`);
-      fs.mkdirSync(tempDir, { recursive: true });
-      const tempFile = path.join(tempDir, "video.mp4");
-      fs.writeFileSync(tempFile, buffer);
-      console.log(
-        `[Gemini] Wrote ${(buffer.length / 1024 / 1024).toFixed(1)} MB to ${tempFile}`,
-      );
-      fileUri = await uploadToGeminiFiles(ai, tempFile, mimeType, `ad-${nanoid(6)}.mp4`);
+      console.log(`[Gemini] S3 download complete: ${(buffer.length / 1024 / 1024).toFixed(1)} MB in ${Date.now() - t0}ms`);
+
+      if (buffer.length < INLINE_THRESHOLD_BYTES) {
+        // Small file: skip Files API entirely — send as inline base64.
+        // Eliminates upload + polling overhead (saves 30s–3 min for typical broadcast ads).
+        console.log(`[Gemini] Using INLINE mode — skipping Files API`);
+        inlineBuffer = buffer;
+        inlineMimeType = mimeType;
+      } else {
+        // Large file: must use Files API.
+        tempDir = path.join(os.tmpdir(), `gemini-${nanoid(8)}`);
+        fs.mkdirSync(tempDir, { recursive: true });
+        const tempFile = path.join(tempDir, "video.mp4");
+        fs.writeFileSync(tempFile, buffer);
+        fileUri = await uploadToGeminiFiles(ai, tempFile, mimeType, `ad-${nanoid(6)}.mp4`);
+        console.log(`[Gemini] Files API ready in ${Date.now() - t0}ms`);
+      }
       sourceType = "file_upload";
 
     } else if (sourceUrl) {
-      // Public/presigned URL: download first (Gemini can't reach presigned S3 URLs)
+      // Public/presigned URL: download first (Gemini can't reach presigned S3 URLs).
       console.log(`[Gemini] URL download mode: "${adTitle}" — ${sourceUrl.slice(0, 80)}...`);
       const res = await fetch(sourceUrl);
       if (!res.ok) {
@@ -272,11 +286,20 @@ export async function analyzeVideoWithGemini(
           `(limit: ${MAX_FILE_BYTES / 1024 / 1024} MB)`,
         );
       }
-      tempDir = path.join(os.tmpdir(), `gemini-${nanoid(8)}`);
-      fs.mkdirSync(tempDir, { recursive: true });
-      const tempFile = path.join(tempDir, "video.mp4");
-      fs.writeFileSync(tempFile, buffer);
-      fileUri = await uploadToGeminiFiles(ai, tempFile, mimeType, `ad-${nanoid(6)}.mp4`);
+      console.log(`[Gemini] URL download complete: ${(buffer.length / 1024 / 1024).toFixed(1)} MB in ${Date.now() - t0}ms`);
+
+      if (buffer.length < INLINE_THRESHOLD_BYTES) {
+        console.log(`[Gemini] Using INLINE mode — skipping Files API`);
+        inlineBuffer = buffer;
+        inlineMimeType = mimeType;
+      } else {
+        tempDir = path.join(os.tmpdir(), `gemini-${nanoid(8)}`);
+        fs.mkdirSync(tempDir, { recursive: true });
+        const tempFile = path.join(tempDir, "video.mp4");
+        fs.writeFileSync(tempFile, buffer);
+        fileUri = await uploadToGeminiFiles(ai, tempFile, mimeType, `ad-${nanoid(6)}.mp4`);
+        console.log(`[Gemini] Files API ready in ${Date.now() - t0}ms`);
+      }
       sourceType = "url";
 
     } else {
@@ -289,8 +312,14 @@ export async function analyzeVideoWithGemini(
 
     console.log(
       `[Gemini] Generating compliance analysis: "${adTitle}" ` +
-      `(model=${GEMINI_MODEL} sourceType=${sourceType})`,
+      `(model=${GEMINI_MODEL} sourceType=${sourceType} ` +
+      `mode=${inlineBuffer ? "inline" : "files_api"})`,
     );
+
+    // Build the video part: inline base64 (small files) or Files API URI (large files).
+    const videoPart = inlineBuffer
+      ? { inlineData: { data: inlineBuffer.toString("base64"), mimeType: inlineMimeType } }
+      : { fileData: { fileUri, mimeType: sourceType === "youtube" ? "video/mp4" : mimeType } };
 
     const response = await withTimeout(
       ai.models.generateContent({
@@ -298,10 +327,7 @@ export async function analyzeVideoWithGemini(
         contents: [
           {
             role: "user",
-            parts: [
-              { fileData: { fileUri, mimeType: sourceType === "youtube" ? "video/mp4" : mimeType } },
-              { text: prompt },
-            ],
+            parts: [videoPart, { text: prompt }],
           },
         ],
         config: {
@@ -315,7 +341,7 @@ export async function analyzeVideoWithGemini(
 
     const rawText = response.text ?? "";
     const elapsedMs = Date.now() - t0;
-    console.log(`[Gemini] Response: ${rawText.length} chars in ${elapsedMs}ms`);
+    console.log(`[Gemini] Analysis complete in ${elapsedMs}ms — response: ${rawText.length} chars`);
 
     // ── Validate with Zod — never trust raw LLM JSON ─────────────────────────
 

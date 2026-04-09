@@ -8,6 +8,9 @@ import { runFrameAnalysis, type FrameFinding, type FrameAnalysisResult } from ".
 import { FCC_FRAMEWORK, IAB_FRAMEWORK } from "./complianceFrameworks";
 import { extractEvidence, type ExtractedEvidence } from "./evidenceExtractor";
 import { evaluateRules, summarizeFindings, type RuleFinding } from "./rulesEngine";
+import { transcribeVideoAudio, type WhisperTranscriptResult } from "./whisperTranscription";
+import { getAdvertiserById } from "./db";
+import { ENV } from "./_core/env";
 import type { Policy, AdSubmission } from "../drizzle/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,8 +39,8 @@ export interface UnifiedReviewResult extends AiAnalysisResult {
   moderatorBrief: string;
   // Pipeline metadata
   deepAnalysisTriggered: boolean;
-  // Single synthesised score — the ONE number shown to reviewers
-  clearanceScore: number;
+  // Single synthesised score — null when Stage 2 was skipped (not fabricated)
+  clearanceScore: number | null;
   // Agentic routing decision (from Stage 3)
   routingDecision: AgentRoutingDecision;
   routingReason: string;
@@ -47,6 +50,8 @@ export interface UnifiedReviewResult extends AiAnalysisResult {
   // Phase 2: deterministic policy evaluation
   evidence: ExtractedEvidence[];
   policyFindings: RuleFinding[];
+  // Whisper audio transcript (null when Whisper didn't run or failed)
+  whisperTranscript: WhisperTranscriptResult | null;
 }
 
 export type ReviewStage =
@@ -108,14 +113,25 @@ function computeRoutingDecision(
     };
   }
 
-  // High-confidence auto-approve: clean content, no critical/blocking findings
+  // High-confidence auto-approve: REQUIRES Stage 2 deep analysis to have run.
+  // A quick visual scan alone is never sufficient — regulated content (pharma, alcohol,
+  // firearms, etc.) could have been missed. Without Stage 2, the max decision is needs_review.
   if (conf >= 85 && baseResult.recommendation === "auto_approve" && !hasCritical) {
+    if (!deepTriggered) {
+      return {
+        decision: "needs_review",
+        reason: "Quick scan passed but deep compliance analysis was not performed. Auto-approval requires Stage 2 — routing to human review.",
+        confidence: conf,
+        stagesCompleted: stagesRun,
+        skippedDeepAnalysis: true,
+      };
+    }
     return {
       decision: "auto_approve",
-      reason: `High confidence (${conf}%) with clean content and no critical findings — auto-approved without human review.`,
+      reason: `High confidence (${conf}%) with clean content, no critical findings, and full FCC/IAB compliance analysis completed — auto-approved.`,
       confidence: conf,
       stagesCompleted: stagesRun,
-      skippedDeepAnalysis: !deepTriggered,
+      skippedDeepAnalysis: false,
     };
   }
 
@@ -186,8 +202,10 @@ function buildSkippedComplianceScores(): ComplianceCategoryScore[] {
 
 /**
  * Single synthesised clearance score — the one number shown to reviewers.
+ * Returns null when Stage 2 deep analysis was skipped — fabricating a passing
+ * number from a quick scan alone would be dishonest and create compliance liability.
  *
- * Formula:
+ * Formula (only when stage2Completed === true):
  *  1. Start with min(overallScore, overallVideoScore) — most conservative of the two.
  *  2. If any compliance category failed, cap at 49 (amber/red boundary).
  *  3. If any compliance category warned and score is above 79, cap at 79.
@@ -196,7 +214,9 @@ function computeClearanceScore(
   overallScore: number,
   overallVideoScore: number | null,
   complianceScores: ComplianceCategoryScore[] | undefined,
-): number {
+  stage2Completed: boolean,
+): number | null {
+  if (!stage2Completed) return null;
   let score = Math.min(overallScore, overallVideoScore ?? overallScore);
   if (complianceScores) {
     if (complianceScores.some(c => c.status === "fail")) {
@@ -221,15 +241,19 @@ function computeClearanceScore(
  * Stage 2 — Deep Analysis (conditional):
  *   Full FCC/IAB compliance scoring via analyzeAdContent. Skipped when
  *   Stage 1 is fully clean and no regulated categories are detected.
+ *   Runs in PARALLEL with Stage 1 when regulated content is detected from
+ *   ad metadata — saves 30-60s for pharma/alcohol/political ads.
  *
  * Stage 3 — Decision & Report (always runs):
  *   Synthesises findings, generates the moderator brief, produces final result.
+ *   Moderator brief and deterministic evidence/routing run in parallel.
  */
 export async function runUnifiedAiReview(
   ad: AdSubmission,
   policies: Policy[],
   onStageChange: (stage: ReviewStage) => Promise<void>,
 ): Promise<UnifiedReviewResult> {
+  const pipelineStart = Date.now();
   const isVisual =
     ad.format === "video" ||
     ad.format === "image" ||
@@ -237,82 +261,160 @@ export async function runUnifiedAiReview(
 
   const stagesRun: number[] = [];
 
-  // ─── Stage 1: Quick Scan ────────────────────────────────────────────────
-  await onStageChange("stage1_running");
-  stagesRun.push(1);
-  console.log(`[UnifiedReview] Stage 1 starting for ad ${ad.id} (${ad.title})`);
+  // ── Pre-flight: resolve advertiser context and regulated status ──────────
+  // These checks are synchronous or fast DB queries that don't require video download.
+  // Results are passed to Stage 2 so it has richer context for compliance analysis.
+  const regulatedByContent = isRegulatedContent(ad);
+
+  let advertiserName: string | null = null;
+  let advertiserIndustry: string | null = null;
+  if (ad.advertiserId) {
+    const advertiser = await getAdvertiserById(ad.advertiserId);
+    if (advertiser) {
+      advertiserName = advertiser.name;
+      advertiserIndustry = advertiser.industry ?? null;
+    }
+  }
+  // Fall back to advertiser detected during upload-time creative analysis
+  const existingAnalysis = ad.aiAnalysis as Record<string, any> | null;
+  if (!advertiserName && existingAnalysis?.detectedAdvertiser?.name) {
+    advertiserName = existingAnalysis.detectedAdvertiser.name;
+    advertiserIndustry = existingAnalysis.detectedAdvertiser.industry ?? null;
+  }
+  if (advertiserName) {
+    console.log(`[UnifiedReview] Advertiser context: "${advertiserName}" (${advertiserIndustry ?? "industry unknown"})`);
+  }
+
+  // Whisper is available for video uploads only (not YouTube/Vimeo — no local file)
+  const canRunWhisper = !!(ad.fileKey && ENV.openaiApiKey &&
+    (ad.format === "video" || ad.sourceType === "upload"));
 
   let stage1Result: FrameAnalysisResult | null = null;
-  if (isVisual) {
-    stage1Result = await runFrameAnalysis(
-      {
-        adId: ad.id,
-        title: ad.title,
-        description: ad.description,
-        format: ad.format,
-        fileUrl: ad.fileUrl,
-        fileKey: ad.fileKey,
-        sourceType: ad.sourceType,
-        sourceUrl: ad.sourceUrl,
-        videoProvider: ad.videoProvider,
-        videoId: ad.videoId,
-        thumbnailUrl: ad.thumbnailUrl,
-        videoDuration: ad.videoDuration,
-        targetAudience: ad.targetAudience,
-      },
-      policies,
-      // no intervalSeconds — uses adaptive default from video duration
-    );
-    console.log(
-      `[UnifiedReview] Stage 1 complete: score=${stage1Result.overallVideoScore} ` +
-      `flagged=${stage1Result.flaggedFrameCount} frames=${stage1Result.totalFramesAnalyzed}`,
-    );
-  } else {
-    console.log(`[UnifiedReview] Stage 1 skipped — non-visual content (format=${ad.format})`);
-  }
-
-  // ─── Stage 2: Deep Analysis (conditional) ───────────────────────────────
-  // Always run deep analysis for regulated content categories, even if Stage 1 looks clean.
-  const regulatedByContent = isRegulatedContent(ad);
-  const runDeep = !stage1Result || requiresDeepAnalysis(stage1Result) || regulatedByContent;
+  let whisperResult: WhisperTranscriptResult | null = null;
   let aiResult: AiAnalysisResult | null = null;
+  let runDeep = false;
 
-  if (runDeep) {
+  const adInput = {
+    adId: ad.id,
+    title: ad.title,
+    description: ad.description,
+    format: ad.format,
+    fileUrl: ad.fileUrl,
+    fileKey: ad.fileKey,
+    sourceType: ad.sourceType,
+    sourceUrl: ad.sourceUrl,
+    videoProvider: ad.videoProvider,
+    videoId: ad.videoId,
+    thumbnailUrl: ad.thumbnailUrl,
+    videoDuration: ad.videoDuration,
+    targetAudience: ad.targetAudience,
+  };
+
+  // Helper — Whisper transcription (non-fatal: failure just means no transcript)
+  const runWhisper = async (): Promise<WhisperTranscriptResult | null> => {
+    if (!canRunWhisper) return null;
+    try {
+      console.log(`[UnifiedReview] Whisper starting in parallel — key=${ad.fileKey}`);
+      const result = await transcribeVideoAudio({ fileKey: ad.fileKey!, adTitle: ad.title });
+      console.log(`[UnifiedReview] Whisper complete in ${Date.now() - pipelineStart}ms — lang=${result.language} duration=${result.durationSeconds.toFixed(1)}s`);
+      return result;
+    } catch (err) {
+      console.warn(`[UnifiedReview] Whisper failed (non-fatal — proceeding without transcript):`, (err as Error).message);
+      return null;
+    }
+  };
+
+  await onStageChange("stage1_running");
+  stagesRun.push(1);
+
+  if (regulatedByContent && isVisual) {
+    // ── PARALLEL PATH: regulated visual content ──────────────────────────────
+    // Stage 2 WILL run regardless — regulated content always needs deep compliance.
+    // Run Stage 1 + Whisper in parallel so Stage 2 gets the transcript.
+    console.log(
+      `[UnifiedReview] Regulated content detected — ` +
+      `running Stage 1 + Whisper in parallel for "${ad.title}"`,
+    );
+    runDeep = true;
+
+    const [stage1Done, whisperDone] = await Promise.all([
+      runFrameAnalysis(adInput, policies),
+      runWhisper(),
+    ]);
+
+    stage1Result = stage1Done;
+    whisperResult = whisperDone;
+    console.log(
+      `[UnifiedReview] Stage 1 + Whisper complete in ${Date.now() - pipelineStart}ms: ` +
+      `score=${stage1Result.overallVideoScore} flagged=${stage1Result.flaggedFrameCount} ` +
+      `transcript=${whisperResult ? `${whisperResult.segments.length} segments` : "none"}`,
+    );
+
+    // Stage 2 runs with the transcript and advertiser context
     await onStageChange("stage2_running");
     stagesRun.push(2);
+    console.log(`[UnifiedReview] Stage 2 starting — regulated content deep compliance analysis`);
+    aiResult = await analyzeAdContent(ad, policies, {
+      transcript: whisperResult?.fullText ?? null,
+      detectedAdvertiserName: advertiserName,
+      detectedAdvertiserIndustry: advertiserIndustry,
+      whisperLanguage: whisperResult?.language ?? null,
+    });
     console.log(
-      `[UnifiedReview] Stage 2 starting — ` +
-      (regulatedByContent ? "regulated content detected in ad metadata" :
-       stage1Result
-        ? `triggered by score=${stage1Result.overallVideoScore} flagged=${stage1Result.flaggedFrameCount}`
-        : "non-visual content always gets deep analysis"),
+      `[UnifiedReview] Stage 2 complete in ${Date.now() - pipelineStart}ms: ` +
+      `score=${aiResult.overallScore} recommendation=${aiResult.recommendation}`,
     );
-    aiResult = await analyzeAdContent(ad, policies);
-    console.log(
-      `[UnifiedReview] Stage 2 complete: score=${aiResult.overallScore} ` +
-      `recommendation=${aiResult.recommendation}`,
-    );
-  } else {
-    console.log(
-      `[UnifiedReview] Stage 2 skipped — Stage 1 clean ` +
-      `(score=${stage1Result!.overallVideoScore}, no regulated content)`,
-    );
-  }
 
-  // ─── Phase 2: Deterministic policy evaluation ────────────────────────────
-  // Extract structured evidence from all AI outputs, then run the rules engine.
-  // This is deterministic — no LLM calls. Re-runnable on existing evidence.
-  const evidence = extractEvidence({
-    aiModerationResult: aiResult ?? undefined,
-    frameResult: stage1Result ?? undefined,
-  });
-  const policyFindings = evaluateRules(evidence);
-  const { failCount, warningCount, blockingViolations } = summarizeFindings(policyFindings);
-  console.log(
-    `[UnifiedReview] Phase 2 complete: evidence=${evidence.length} ` +
-    `policy_findings=${policyFindings.length} fails=${failCount} warnings=${warningCount} ` +
-    `blocking=${blockingViolations.join(",") || "none"}`,
-  );
+  } else {
+    // ── SEQUENTIAL PATH: non-regulated or non-visual content ─────────────────
+    // Run Stage 1 + Whisper in parallel; Stage 2 fires afterwards only if needed.
+    console.log(`[UnifiedReview] Stage 1 starting for ad ${ad.id} (${ad.title})`);
+
+    if (isVisual) {
+      const [stage1Done, whisperDone] = await Promise.all([
+        runFrameAnalysis(adInput, policies),
+        runWhisper(),
+      ]);
+      stage1Result = stage1Done;
+      whisperResult = whisperDone;
+      console.log(
+        `[UnifiedReview] Stage 1 + Whisper complete in ${Date.now() - pipelineStart}ms: ` +
+        `score=${stage1Result.overallVideoScore} flagged=${stage1Result.flaggedFrameCount} ` +
+        `transcript=${whisperResult ? `${whisperResult.segments.length} segments` : "none"}`,
+      );
+    } else {
+      console.log(`[UnifiedReview] Stage 1 skipped — non-visual content (format=${ad.format})`);
+    }
+
+    // Non-visual content and content with Stage 1 issues both trigger Stage 2.
+    runDeep = !stage1Result || requiresDeepAnalysis(stage1Result);
+
+    if (runDeep) {
+      await onStageChange("stage2_running");
+      stagesRun.push(2);
+      console.log(
+        `[UnifiedReview] Stage 2 starting — ` +
+        (stage1Result
+          ? `triggered by Stage 1: score=${stage1Result.overallVideoScore} flagged=${stage1Result.flaggedFrameCount}`
+          : "non-visual content always gets deep analysis"),
+      );
+      aiResult = await analyzeAdContent(ad, policies, {
+        transcript: whisperResult?.fullText ?? null,
+        detectedAdvertiserName: advertiserName,
+        detectedAdvertiserIndustry: advertiserIndustry,
+        whisperLanguage: whisperResult?.language ?? null,
+      });
+      console.log(
+        `[UnifiedReview] Stage 2 complete in ${Date.now() - pipelineStart}ms: ` +
+        `score=${aiResult.overallScore} recommendation=${aiResult.recommendation}`,
+      );
+    } else {
+      console.log(
+        `[UnifiedReview] Stage 2 skipped — Stage 1 clean ` +
+        `(score=${stage1Result!.overallVideoScore}, no regulated content)`,
+      );
+    }
+  }
 
   // ─── Stage 3: Decision & Report ─────────────────────────────────────────
   await onStageChange("stage3_running");
@@ -341,8 +443,11 @@ export async function runUnifiedAiReview(
       contentCategories: [],
       violations,
       summary: stage1Result?.summary ?? "Content passed quick scan with no issues detected.",
-      recommendation: score >= 90 ? "auto_approve" : "needs_review",
-      confidence: 85,
+      // Stage 1 only — never auto_approve without Stage 2, regardless of score.
+      // Setting needs_review here is belt-and-suspenders; computeRoutingDecision
+      // enforces the same rule via the deepTriggered guard.
+      recommendation: "needs_review",
+      confidence: 60,
       details: {},
       complianceScores: buildSkippedComplianceScores(),
       overallFccScore: undefined,
@@ -360,22 +465,46 @@ export async function runUnifiedAiReview(
     };
   }
 
-  // Generate moderator brief from synthesised results
-  const moderatorBrief = await generateModerationSuggestion(
-    { title: ad.title, description: ad.description ?? null, format: ad.format, aiAnalysis: baseResult as any },
-    baseResult.violations.map(v => ({ description: v.description, severity: v.severity })),
-  );
+  // Run the moderator brief (LLM call) and the deterministic evidence/routing pipeline
+  // in PARALLEL — the brief doesn't affect scoring or routing, so there's no dependency.
+  const [moderatorBrief, stage3Results] = await Promise.all([
+    generateModerationSuggestion(
+      { title: ad.title, description: ad.description ?? null, format: ad.format, aiAnalysis: baseResult as any },
+      baseResult.violations.map(v => ({ description: v.description, severity: v.severity })),
+    ),
+    Promise.resolve().then(() => {
+      // Phase 2: Deterministic policy evaluation — no LLM calls, re-runnable.
+      const evidence = extractEvidence({
+        aiModerationResult: aiResult ?? undefined,
+        frameResult: stage1Result ?? undefined,
+      });
+      const policyFindings = evaluateRules(evidence);
+      const { failCount, warningCount, blockingViolations } = summarizeFindings(policyFindings);
+      console.log(
+        `[UnifiedReview] Phase 2 complete: evidence=${evidence.length} ` +
+        `policy_findings=${policyFindings.length} fails=${failCount} warnings=${warningCount} ` +
+        `blocking=${blockingViolations.join(",") || "none"}`,
+      );
+      // clearanceScore is null when Stage 2 was skipped — never fabricate a number.
+      const clearanceScore = computeClearanceScore(
+        baseResult.overallScore,
+        stage1Result?.overallVideoScore ?? null,
+        baseResult.complianceScores,
+        runDeep,
+      );
+      const routing = computeRoutingDecision(baseResult, runDeep, stagesRun);
+      return { evidence, policyFindings, clearanceScore, routing };
+    }),
+  ]);
 
-  // Compute clearance score and routing decision
-  const clearanceScore = computeClearanceScore(
-    baseResult.overallScore,
-    stage1Result?.overallVideoScore ?? null,
-    baseResult.complianceScores,
-  );
-  const routing = computeRoutingDecision(baseResult, runDeep, stagesRun);
+  const { evidence, policyFindings, clearanceScore, routing } = stage3Results;
   console.log(
-    `[UnifiedReview] Stage 3 complete — routing=${routing.decision} ` +
-    `confidence=${routing.confidence} reason="${routing.reason}"`,
+    `[UnifiedReview] Stage 3 complete in ${Date.now() - pipelineStart}ms — ` +
+    `routing=${routing.decision} confidence=${routing.confidence}`,
+  );
+  console.log(
+    `[UnifiedReview] Pipeline complete in ${Date.now() - pipelineStart}ms total — ` +
+    `stages=[${routing.stagesCompleted.join(",")}] clearance=${clearanceScore ?? "null (Stage 2 skipped)"}`,
   );
 
   return {
@@ -404,5 +533,7 @@ export async function runUnifiedAiReview(
     // Phase 2 deterministic policy evaluation
     evidence,
     policyFindings,
+    // Whisper transcript (null if Whisper didn't run or failed)
+    whisperTranscript: whisperResult,
   };
 }

@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { storagePut, storageGetSignedUrl, deriveKeyFromStorageUrl } from "./storage";
+import { storagePut, storageGetSignedUrl, deriveKeyFromStorageUrl, storageDownloadBuffer } from "./storage";
 import { analyzeAdContent, generateModerationSuggestion } from "./aiModeration";
 import { parseVideoUrl, detectVideoProvider, isVideoUrl } from "./videoUrlParser";
 import { runFrameAnalysis } from "./frameAnalysis";
@@ -12,7 +12,16 @@ import { runUnifiedAiReview } from "./aiReviewPipeline";
 import { analyzeVideoWithGemini } from "./geminiVideoAnalysis";
 import { transcribeVideoAudio } from "./whisperTranscription";
 import { getDefaultPolicySeedData } from "./complianceFrameworks";
+import { invokeLLM } from "./_core/llm";
+import { extractSingleFrame } from "./frameExtraction";
+import { matchAdvertiser, normalizeAdvertiserName } from "./advertiserMatcher";
 import { nanoid } from "nanoid";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+const execFileAsync = promisify(execFile);
 
 // ─── AI Review Result Saver (preserves run history) ──────────────────────────
 // Before overwriting aiAnalysis, stashes the previous result in previousRuns[].
@@ -21,7 +30,7 @@ import { nanoid } from "nanoid";
 async function saveAiReviewResult(
   adId: number,
   result: Record<string, unknown>,
-  scores: { aiScore: number; brandSafetyScore: number },
+  scores: { aiScore: number | null; brandSafetyScore: number },
 ): Promise<void> {
   const current = await db.getAdSubmissionById(adId);
   const existing = (current?.aiAnalysis ?? {}) as Record<string, unknown>;
@@ -347,7 +356,11 @@ export const appRouter = router({
         notes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const id = await db.createAdvertiser({ ...input, createdBy: ctx.user.id });
+        const id = await db.createAdvertiser({
+          ...input,
+          normalizedName: normalizeAdvertiserName(input.name) || null,
+          createdBy: ctx.user.id,
+        });
         await db.createAuditEntry({
           userId: ctx.user.id, action: "create_advertiser",
           entityType: "advertiser", entityId: id, details: { name: input.name },
@@ -367,7 +380,10 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
-        await db.updateAdvertiser(id, data);
+        const updateData = data.name
+          ? { ...data, normalizedName: normalizeAdvertiserName(data.name) || null }
+          : data;
+        await db.updateAdvertiser(id, updateData);
         await db.createAuditEntry({
           userId: ctx.user.id, action: "update_advertiser",
           entityType: "advertiser", entityId: id, details: data,
@@ -422,6 +438,7 @@ export const appRouter = router({
         title: z.string().min(1),
         description: z.string().optional(),
         advertiserId: z.number().optional(),
+        advertiserName: z.string().optional(), // text input value — used for auto-match/create
         format: z.enum(["video", "image", "audio", "text", "rich_media"]),
         // Source type
         sourceType: z.enum(["upload", "youtube", "vimeo", "direct_url"]).optional(),
@@ -447,8 +464,32 @@ export const appRouter = router({
         priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // ── Resolve advertiser: match existing or create new ─────────────────
+        let finalAdvertiserId = input.advertiserId;
+
+        if (!finalAdvertiserId && input.advertiserName?.trim()) {
+          const rawName = input.advertiserName.trim();
+          // Full 4-level match (LLM enabled) as a final safety check
+          const match = await matchAdvertiser(rawName);
+          if (match) {
+            finalAdvertiserId = match.existingId;
+          } else {
+            // Create a new advertiser record
+            const normalized = normalizeAdvertiserName(rawName);
+            const newAdvId = await db.createAdvertiser({
+              name: rawName,
+              normalizedName: normalized || null,
+              verificationStatus: "pending",
+              createdBy: ctx.user.id,
+            });
+            finalAdvertiserId = newAdvId;
+          }
+        }
+
+        const { advertiserName: _drop, ...restInput } = input;
         const id = await db.createAdSubmission({
-          ...input,
+          ...restInput,
+          advertiserId: finalAdvertiserId,
           sourceType: input.sourceType || "upload",
           targetPlatforms: input.targetPlatforms || [],
           scheduledStart: input.scheduledStart ? new Date(input.scheduledStart) : undefined,
@@ -528,6 +569,221 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { url } = await storageGetSignedUrl(input.fileKey, 3600);
         return { url };
+      }),
+    // ── Creative Analysis — pre-populates submission form via vision AI + Whisper ──
+    analyzeCreative: protectedProcedure
+      .input(z.object({
+        fileKey: z.string(),
+        mimeType: z.string(),
+        originalFilename: z.string(),
+        videoUrl: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { fileKey, mimeType, originalFilename } = input;
+
+        // ── Deterministic format detection ──────────────────────────────────
+        const detectedFormat: "video" | "image" | "audio" | "text" | "rich_media" =
+          mimeType.startsWith("video/") ? "video"
+          : mimeType.startsWith("image/") ? "image"
+          : mimeType.startsWith("audio/") ? "audio"
+          : mimeType === "text/plain" ? "text"
+          : "rich_media";
+
+        // ── Title fallback from filename ─────────────────────────────────────
+        const fallbackTitle = originalFilename
+          .replace(/\.[^.]+$/, "")
+          .replace(/[-_]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        type AnalysisResult = {
+          suggestedTitle: string | null;
+          suggestedDescription: string;
+          detectedFormat: typeof detectedFormat;
+          detectedAdvertiser: { name: string; existingId: number | null; confidence: string | null; matchReason: string | null; aiDetectedName: string } | null;
+          suggestedTargetAudience: string | null;
+          contentCategories: string[];
+          analysisMethod: string;
+        };
+
+        const fallback: AnalysisResult = {
+          suggestedTitle: fallbackTitle,
+          suggestedDescription: "",
+          detectedFormat,
+          detectedAdvertiser: null,
+          suggestedTargetAudience: null,
+          contentCategories: [],
+          analysisMethod: "filename-only",
+        };
+
+        // Non-visual formats: skip vision entirely
+        if (detectedFormat !== "video" && detectedFormat !== "image") {
+          return fallback;
+        }
+
+        let imageBase64: string | null = null;
+        let transcript: string | null = null;
+        let analysisMethod = "frame-only";
+
+        const tempDir = path.join(os.tmpdir(), `analyze-${nanoid(8)}`);
+        fs.mkdirSync(tempDir, { recursive: true });
+
+        try {
+          if (detectedFormat === "image") {
+            const buffer = await storageDownloadBuffer(fileKey);
+            imageBase64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
+          } else {
+            // Video: download, extract first frame + transcribe audio
+            const videoPath = path.join(tempDir, "video.mp4");
+            const buffer = await storageDownloadBuffer(fileKey);
+            fs.writeFileSync(videoPath, buffer);
+
+            // Frame extraction
+            const framePath = path.join(tempDir, "frame.jpg");
+            try {
+              await extractSingleFrame(videoPath, 1, framePath);
+              const frameBuffer = fs.readFileSync(framePath);
+              imageBase64 = `data:image/jpeg;base64,${frameBuffer.toString("base64")}`;
+            } catch (err) {
+              console.warn("[analyzeCreative] Frame extraction failed:", err);
+            }
+
+            // Whisper transcription (best-effort, uses existing module)
+            try {
+              const whisperResult = await transcribeVideoAudio({ localPath: videoPath, adTitle: originalFilename });
+              if (whisperResult.fullText && whisperResult.fullText.trim().length > 10) {
+                transcript = whisperResult.fullText;
+                analysisMethod = "frame+audio";
+              }
+            } catch (err) {
+              console.warn("[analyzeCreative] Whisper failed, proceeding frame-only:", err);
+            }
+          }
+
+          if (!imageBase64) return fallback;
+
+          // ── Vision API call ─────────────────────────────────────────────────
+          let analysisPrompt = `Analyze this advertisement creative. `;
+          if (transcript) {
+            analysisPrompt += `You have a frame from the video AND a transcript of its audio.\n\nTRANSCRIPT:\n${transcript}\n\nBased on BOTH the visual content and the transcript, return a JSON object. IMPORTANT: Prioritize information from the transcript over visual guesses. If the speaker mentions a product name, company, or specific claims, use those — don't guess based on the visual setting alone.`;
+          } else {
+            analysisPrompt += `Return a JSON object based on what you see.`;
+          }
+          analysisPrompt += `\n\nReturn ONLY a JSON object (no markdown, no backticks) with these fields:\n{\n  "title": "short descriptive title using brand/product name if identifiable",\n  "description": "1-2 sentence description of what the ad is promoting and its key message",\n  "advertiser": "brand or company name if identifiable, or null",\n  "targetAudience": "inferred target demographic, or null",\n  "contentCategories": ["category1", "category2"]\n}`;
+
+          const llmResult = await invokeLLM({
+            messages: [
+              { role: "system", content: "You are an ad classification system. Return ONLY valid JSON. No markdown, no backticks, no explanation." },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: analysisPrompt },
+                  { type: "image_url", image_url: { url: imageBase64, detail: "high" as const } },
+                ],
+              },
+            ],
+            maxTokens: 500,
+          });
+
+          const responseText = typeof llmResult.choices[0]?.message?.content === "string"
+            ? llmResult.choices[0].message.content : "";
+          const cleaned = responseText.replace(/```json\s*/g, "").replace(/```/g, "").trim();
+
+          let parsed: Record<string, unknown>;
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch {
+            console.warn("[analyzeCreative] Failed to parse LLM JSON:", cleaned);
+            return { ...fallback, analysisMethod };
+          }
+
+          // ── Advertiser matching ─────────────────────────────────────────────
+          type DetectedAdvertiser = AnalysisResult["detectedAdvertiser"];
+          let detectedAdvertiser: DetectedAdvertiser = null;
+          if (typeof parsed.advertiser === "string" && parsed.advertiser) {
+            const aiDetectedName = parsed.advertiser;
+            const match = await matchAdvertiser(aiDetectedName);
+            if (match) {
+              detectedAdvertiser = {
+                name: match.existingName,
+                existingId: match.existingId,
+                confidence: match.confidence,
+                matchReason: match.matchReason,
+                aiDetectedName,
+              };
+            } else {
+              detectedAdvertiser = { name: aiDetectedName, existingId: null, confidence: null, matchReason: null, aiDetectedName };
+            }
+          }
+
+          return {
+            suggestedTitle: typeof parsed.title === "string" ? parsed.title : fallbackTitle,
+            suggestedDescription: typeof parsed.description === "string" ? parsed.description : "",
+            detectedFormat,
+            detectedAdvertiser,
+            suggestedTargetAudience: typeof parsed.targetAudience === "string" ? parsed.targetAudience : null,
+            contentCategories: Array.isArray(parsed.contentCategories) ? parsed.contentCategories.filter((c): c is string => typeof c === "string") : [],
+            analysisMethod,
+          };
+        } catch (err) {
+          console.warn("[analyzeCreative] Unexpected error, returning fallback:", err);
+          return fallback;
+        } finally {
+          try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+        }
+      }),
+    // ── Lightweight advertiser match — L1-L3 only, no LLM, fast (called on blur) ──
+    checkAdvertiserMatch: protectedProcedure
+      .input(z.object({ name: z.string() }))
+      .query(async ({ input }) => {
+        const name = input.name.trim();
+        if (!name) return { match: null };
+
+        const allAdvertisers = await db.getAdvertisers();
+        const inputLower = name.toLowerCase();
+        const inputNorm = normalizeAdvertiserName(name);
+
+        // L1: exact
+        for (const adv of allAdvertisers) {
+          if (adv.name.toLowerCase() === inputLower) {
+            return { match: { existingId: adv.id, existingName: adv.name, confidence: "exact" as const, matchReason: "Exact name match" } };
+          }
+        }
+        // L2: normalized
+        for (const adv of allAdvertisers) {
+          const advNorm = adv.normalizedName ?? normalizeAdvertiserName(adv.name);
+          if (advNorm === inputNorm && inputNorm.length > 0) {
+            return { match: { existingId: adv.id, existingName: adv.name, confidence: "high" as const, matchReason: "Normalized match" } };
+          }
+        }
+        // L3: containment (>= 4 chars)
+        if (inputNorm.length >= 4) {
+          for (const adv of allAdvertisers) {
+            const advNorm = adv.normalizedName ?? normalizeAdvertiserName(adv.name);
+            const shorter = inputNorm.length <= advNorm.length ? inputNorm : advNorm;
+            const longer = inputNorm.length <= advNorm.length ? advNorm : inputNorm;
+            if (shorter.length >= 4 && longer.includes(shorter)) {
+              return { match: { existingId: adv.id, existingName: adv.name, confidence: "medium" as const, matchReason: "Containment match" } };
+            }
+          }
+        }
+        return { match: null };
+      }),
+    // ── Full advertiser match including LLM — called before submit ────────────
+    matchAdvertiserFull: protectedProcedure
+      .input(z.object({ name: z.string() }))
+      .mutation(async ({ input }) => {
+        if (!input.name.trim()) return { match: null };
+        const match = await matchAdvertiser(input.name.trim());
+        if (!match) return { match: null };
+        return {
+          match: {
+            existingId: match.existingId,
+            existingName: match.existingName,
+            confidence: match.confidence,
+            matchReason: match.matchReason,
+          },
+        };
       }),
     // ── Unified AI Review (replaces runAiScreening + runFrameAnalysis + getAiSuggestion) ──
     runAiReview: moderatorProcedure

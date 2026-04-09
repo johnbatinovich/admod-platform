@@ -3,7 +3,7 @@ import type { AdSubmission, Policy } from "../drizzle/schema";
 import {
   FCC_FRAMEWORK,
   IAB_FRAMEWORK,
-  generateCompliancePrompt,
+  generateMediumCompliancePrompt,
   getComplianceScoringSchema,
 } from "./complianceFrameworks";
 
@@ -238,6 +238,17 @@ async function fetchToBase64(url: string): Promise<string | null> {
 
 // ─── Analysis Function ───────────────────────────────────────────────────────
 
+export interface AnalyzeAdContext {
+  /** Full transcript from Whisper — used as primary signal for language/content */
+  transcript?: string | null;
+  /** Advertiser name resolved from DB or prior creative analysis */
+  detectedAdvertiserName?: string | null;
+  /** Advertiser industry resolved from DB or prior creative analysis */
+  detectedAdvertiserIndustry?: string | null;
+  /** Language code detected by Whisper (e.g. "en") */
+  whisperLanguage?: string | null;
+}
+
 export async function analyzeAdContent(
   ad: Pick<AdSubmission, "title" | "description" | "format" | "fileUrl" | "targetAudience" | "metadata"> & {
     sourceType?: string | null;
@@ -249,13 +260,14 @@ export async function analyzeAdContent(
     videoDuration?: string | null;
     videoAuthor?: string | null;
   },
-  activePolicies: Pick<Policy, "name" | "category" | "rules" | "severity">[]
+  activePolicies: Pick<Policy, "name" | "category" | "rules" | "severity">[],
+  context?: AnalyzeAdContext,
 ): Promise<AiAnalysisResult> {
   const policyContext = activePolicies.map(p =>
     `- ${p.name} (${p.category}, severity: ${p.severity}): ${JSON.stringify(p.rules)}`
   ).join("\n");
 
-  const compliancePrompt = generateCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
+  const compliancePrompt = generateMediumCompliancePrompt([FCC_FRAMEWORK, IAB_FRAMEWORK]);
   const complianceSchema = getComplianceScoringSchema();
 
   const messages: Parameters<typeof invokeLLM>[0]["messages"] = [
@@ -337,6 +349,9 @@ ${ad.videoAuthor ? `Video Author: ${ad.videoAuthor}` : ""}
 ${ad.videoDuration ? `Duration: ${ad.videoDuration}` : ""}
 ${ad.fileUrl ? `File URL: ${ad.fileUrl}` : ""}
 ${ad.metadata ? `Metadata: ${JSON.stringify(ad.metadata)}` : ""}
+${context?.detectedAdvertiserName ? `\nKnown Advertiser: ${context.detectedAdvertiserName}${context.detectedAdvertiserIndustry ? ` — Industry: ${context.detectedAdvertiserIndustry}` : ""}` : ""}
+${context?.whisperLanguage ? `Detected Language (Whisper ASR): ${context.whisperLanguage}` : ""}
+${context?.transcript ? `\nAudio Transcript (Whisper ASR — use as primary signal for spoken content, disclaimers, and claims):\n${context.transcript.slice(0, 3000)}` : ""}
 
 Provide your complete analysis as a JSON object.`
     }
@@ -357,6 +372,9 @@ Format: ${ad.format}
 Description: ${ad.description || "N/A"}
 Target Audience: ${ad.targetAudience || "General"}${videoContext}
 ${ad.metadata ? `Metadata: ${JSON.stringify(ad.metadata)}` : ""}
+${context?.detectedAdvertiserName ? `\nKnown Advertiser: ${context.detectedAdvertiserName}${context.detectedAdvertiserIndustry ? ` — Industry: ${context.detectedAdvertiserIndustry}` : ""}` : ""}
+${context?.whisperLanguage ? `Detected Language (Whisper ASR): ${context.whisperLanguage}` : ""}
+${context?.transcript ? `\nAudio Transcript (Whisper ASR — use as primary signal for spoken content, disclaimers, and claims):\n${context.transcript.slice(0, 3000)}` : ""}
 
 Provide your complete analysis as a JSON object.`;
 

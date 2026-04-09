@@ -96,8 +96,53 @@ async function logStartupDiagnostics() {
   console.log("─────────────────────────────────────────────────");
 }
 
+/**
+ * Queries for any ads that were auto-approved without Stage 2 deep analysis.
+ * These are integrity violations — a quick visual scan alone is not sufficient
+ * to clear regulated content (pharma, alcohol, firearms, etc.).
+ */
+async function checkIntegrityOnStartup() {
+  try {
+    const { getDb } = await import("../db");
+    const db = await getDb();
+    if (!db) return;
+    const { adSubmissions } = await import("../../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    const approvedAds = await db
+      .select({ id: adSubmissions.id, title: adSubmissions.title, aiAnalysis: adSubmissions.aiAnalysis })
+      .from(adSubmissions)
+      .where(eq(adSubmissions.status, "approved"));
+
+    let flagCount = 0;
+    for (const ad of approvedAds) {
+      const analysis = ad.aiAnalysis as any;
+      if (!analysis) continue;
+      const stagesCompleted: number[] = analysis.stagesCompleted ?? [];
+      const skippedDeep: boolean = analysis.skippedDeepAnalysis === true;
+      const routingDecision: string = analysis.routingDecision ?? "";
+      if (
+        routingDecision === "auto_approve" &&
+        (skippedDeep || !stagesCompleted.includes(2))
+      ) {
+        console.warn(
+          `[INTEGRITY] WARNING: Ad #${ad.id} "${ad.title}" was auto-approved without deep analysis. Manual review recommended.`,
+        );
+        flagCount++;
+      }
+    }
+    if (flagCount === 0) {
+      console.log("[INTEGRITY] ✅ No ads found that were auto-approved without Stage 2 analysis.");
+    } else {
+      console.warn(`[INTEGRITY] ⚠️  ${flagCount} ad(s) flagged above. These should be re-reviewed manually.`);
+    }
+  } catch (err) {
+    console.warn("[INTEGRITY] Integrity check failed (non-fatal):", (err as Error).message);
+  }
+}
+
 async function startServer() {
   await logStartupDiagnostics();
+  await checkIntegrityOnStartup();
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
