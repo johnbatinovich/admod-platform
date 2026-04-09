@@ -11,8 +11,8 @@ import { useLocation } from "wouter";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  submitted: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  ai_screening: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  submitted: "bg-blue-50 text-blue-600 border-blue-200",
+  ai_screening: "bg-purple-50 text-purple-700 border-purple-200",
   ai_failed: "bg-red-500/15 text-red-400 border-red-500/30",
   in_review: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
   escalated: "bg-orange-500/15 text-orange-400 border-orange-500/30",
@@ -110,7 +110,7 @@ export default function AdSubmissions() {
             </Select>
             <Select value={aiDecisionFilter} onValueChange={setAiDecisionFilter}>
               <SelectTrigger className="w-[155px] h-9 text-sm bg-background">
-                <Bot className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
+                <Bot className="h-3.5 w-3.5 mr-1.5 text-purple-700" />
                 <SelectValue placeholder="AI Decision" />
               </SelectTrigger>
               <SelectContent>
@@ -162,7 +162,7 @@ export default function AdSubmissions() {
                               </div>
                               {(ad.aiAnalysis as any)?.routingDecision ? (
                                 <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-purple-500/20 border border-background flex items-center justify-center">
-                                  <Bot className="h-2 w-2 text-purple-400" />
+                                  <Bot className="h-2 w-2 text-purple-700" />
                                 </div>
                               ) : (ad.status === "submitted" || ad.status === "draft") ? (
                                 <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-muted border border-background flex items-center justify-center">
@@ -183,7 +183,7 @@ export default function AdSubmissions() {
                               <Youtube className="h-3.5 w-3.5 text-red-500" />
                             )}
                             {ad.sourceType === "vimeo" && (
-                              <Video className="h-3.5 w-3.5 text-blue-400" />
+                              <Video className="h-3.5 w-3.5 text-blue-600" />
                             )}
                             {ad.sourceType === "direct_url" && (
                               <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -242,7 +242,7 @@ export default function AdSubmissions() {
 function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
     low: "text-muted-foreground",
-    normal: "text-blue-400",
+    normal: "text-blue-600",
     high: "text-orange-400",
     urgent: "text-red-400",
   };

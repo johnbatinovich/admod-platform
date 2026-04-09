@@ -49,47 +49,66 @@
 
 :root {
   --radius: 0.5rem;
-  /* Slate-based dark enterprise theme */
-  --background: oklch(0.145 0.005 270);
-  --foreground: oklch(0.93 0.005 270);
-  --card: oklch(0.185 0.008 270);
-  --card-foreground: oklch(0.93 0.005 270);
-  --popover: oklch(0.2 0.008 270);
-  --popover-foreground: oklch(0.93 0.005 270);
-  /* Indigo primary */
-  --primary: oklch(0.65 0.19 265);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.22 0.008 270);
-  --secondary-foreground: oklch(0.82 0.005 270);
-  --muted: oklch(0.22 0.008 270);
-  --muted-foreground: oklch(0.6 0.015 270);
-  --accent: oklch(0.25 0.012 270);
-  --accent-foreground: oklch(0.93 0.005 270);
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.28 0.01 270);
-  --input: oklch(0.25 0.01 270);
-  --ring: oklch(0.65 0.19 265);
+
+  /* ── AdMod Brand: Light Enterprise Theme ─────────────────────────────── */
+
+  /* Off White page background */
+  --background: #F5F7FA;
+  --foreground: #0B1F33;
+
+  /* Pure white cards */
+  --card: #FFFFFF;
+  --card-foreground: #0B1F33;
+  --popover: #FFFFFF;
+  --popover-foreground: #0B1F33;
+
+  /* Slate Blue — primary actions */
+  --primary: #2E4F6F;
+  --primary-foreground: #FFFFFF;
+
+  /* Slightly deeper off-white for secondary surfaces */
+  --secondary: #EDF1F7;
+  --secondary-foreground: #2E4F6F;
+
+  /* Muted surfaces */
+  --muted: #EDF1F7;
+  --muted-foreground: #9AA9B8;
+
+  /* Electric Cyan — accent / CTA */
+  --accent: #2ED3E6;
+  --accent-foreground: #0B1F33;
+
+  /* Destructive — keep severity red */
+  --destructive: #ef4444;
+  --destructive-foreground: #FFFFFF;
+
+  /* Soft Steel borders */
+  --border: #D0DAE6;
+  --input: #E8EEF5;
+  --ring: #2ED3E6;
+
   /* Charts */
-  --chart-1: oklch(0.65 0.19 265);
-  --chart-2: oklch(0.7 0.17 170);
-  --chart-3: oklch(0.75 0.15 80);
-  --chart-4: oklch(0.7 0.18 330);
-  --chart-5: oklch(0.65 0.2 25);
-  /* Sidebar */
-  --sidebar: oklch(0.16 0.006 270);
-  --sidebar-foreground: oklch(0.85 0.005 270);
-  --sidebar-primary: oklch(0.65 0.19 265);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.22 0.01 270);
-  --sidebar-accent-foreground: oklch(0.93 0.005 270);
-  --sidebar-border: oklch(0.26 0.01 270);
-  --sidebar-ring: oklch(0.65 0.19 265);
-  /* Semantic */
-  --success: oklch(0.7 0.17 155);
-  --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.78 0.15 80);
-  --warning-foreground: oklch(0.2 0.02 80);
+  --chart-1: #2E4F6F;
+  --chart-2: #2ED3E6;
+  --chart-3: #22c55e;
+  --chart-4: #eab308;
+  --chart-5: #ef4444;
+
+  /* Sidebar — Midnight Navy */
+  --sidebar: #0B1F33;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #2ED3E6;
+  --sidebar-primary-foreground: #0B1F33;
+  --sidebar-accent: #162D47;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #2ED3E6;
+
+  /* Semantic — keep severity green/yellow */
+  --success: #22c55e;
+  --success-foreground: #FFFFFF;
+  --warning: #eab308;
+  --warning-foreground: #0B1F33;
 }
 
 @layer base {

@@ -500,7 +500,7 @@ export default function NewAd() {
                         {videoUrl.includes("youtube") || videoUrl.includes("youtu.be") ? (
                           <Youtube className="h-4 w-4 text-red-500" />
                         ) : videoUrl.includes("vimeo") ? (
-                          <Video className="h-4 w-4 text-blue-400" />
+                          <Video className="h-4 w-4 text-blue-600" />
                         ) : (
                           <Link2 className="h-4 w-4 text-muted-foreground" />
                         )}

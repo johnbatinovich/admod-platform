@@ -22,8 +22,8 @@ export default function Team() {
 
   const roleColors: Record<string, string> = {
     viewer: "bg-muted text-muted-foreground",
-    reviewer: "bg-blue-500/15 text-blue-400",
-    moderator: "bg-purple-500/15 text-purple-400",
+    reviewer: "bg-blue-50 text-blue-600",
+    moderator: "bg-purple-50 text-purple-700",
     admin: "bg-primary/15 text-primary",
   };
 

@@ -251,7 +251,7 @@ export default function AdDetail() {
                                 {(ad as any).videoProvider === "youtube" ? (
                                   <Youtube className="h-4 w-4 text-red-500" />
                                 ) : (ad as any).videoProvider === "vimeo" ? (
-                                  <Video className="h-4 w-4 text-blue-400" />
+                                  <Video className="h-4 w-4 text-blue-600" />
                                 ) : (
                                   <Link2 className="h-4 w-4" />
                                 )}
@@ -510,7 +510,7 @@ export default function AdDetail() {
                                                 ? "border-red-500/30 text-red-400"
                                                 : issue.severity === "warning"
                                                 ? "border-yellow-500/30 text-yellow-400"
-                                                : "border-blue-500/30 text-blue-400"
+                                                : "border-blue-200 text-blue-600"
                                             }`}>
                                               {issue.category}
                                             </Badge>
@@ -682,7 +682,7 @@ export default function AdDetail() {
                                   ? "bg-green-500/20 text-green-300 border border-green-500/30"
                                   : aiAnalysis.routingDecision === "auto_reject"
                                   ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                                  : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                                  : "bg-yellow-50 text-yellow-700 border border-yellow-300"
                               }`}>
                                 <Zap className="h-3 w-3 mr-1" />
                                 {aiAnalysis.routingDecision === "auto_approve" ? "Auto-Approved" :
@@ -691,7 +691,7 @@ export default function AdDetail() {
                               </Badge>
                             )}
                             {aiAnalysis.skippedDeepAnalysis && (
-                              <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400">Quick scan only</Badge>
+                              <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600">Quick scan only</Badge>
                             )}
                             {aiAnalysis.isPoliticalAd && (
                               <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px]">
@@ -879,7 +879,7 @@ export default function AdDetail() {
                           {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").length > 0 && (
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <Shield className="h-3.5 w-3.5 text-blue-400" />FCC Broadcast Compliance
+                                <Shield className="h-3.5 w-3.5 text-blue-600" />FCC Broadcast Compliance
                               </h4>
                               <div className="space-y-3">
                                 {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "FCC").map((cs: any, idx: number) => (
@@ -891,7 +891,7 @@ export default function AdDetail() {
                           {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").length > 0 && (
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <Shield className="h-3.5 w-3.5 text-purple-400" />IAB Advertising Standards
+                                <Shield className="h-3.5 w-3.5 text-purple-700" />IAB Advertising Standards
                               </h4>
                               <div className="space-y-3">
                                 {aiAnalysis.complianceScores.filter((cs: any) => cs.framework === "IAB").map((cs: any, idx: number) => (
@@ -1090,8 +1090,8 @@ export default function AdDetail() {
                                       <Badge variant="outline" className="text-[10px]">{item.severity}</Badge>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      {item.fccRelevant && <Badge variant="outline" className="text-[9px] border-blue-500/30 text-blue-400">FCC</Badge>}
-                                      {item.iabRelevant && <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400">IAB</Badge>}
+                                      {item.fccRelevant && <Badge variant="outline" className="text-[9px] border-blue-200 text-blue-600">FCC</Badge>}
+                                      {item.iabRelevant && <Badge variant="outline" className="text-[9px] border-purple-200 text-purple-700">IAB</Badge>}
                                       <span className="text-[10px] text-muted-foreground">{item.confidence}%</span>
                                     </div>
                                   </div>
@@ -1182,7 +1182,7 @@ export default function AdDetail() {
                             )}
                             {aiAnalysis.audienceDemographics.lookalikAdvertisers?.length > 0 && (
                               <div>
-                                <h5 className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2 flex items-center gap-1.5">
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-2 flex items-center gap-1.5">
                                   <Building2 className="h-3.5 w-3.5" />Lookalike Advertisers
                                 </h5>
                                 <div className="grid grid-cols-2 gap-2">
@@ -1389,7 +1389,7 @@ export default function AdDetail() {
                         ? "bg-green-500/20 text-green-300 border border-green-500/30"
                         : aiAnalysis.routingDecision === "auto_reject"
                         ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                        : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                        : "bg-yellow-50 text-yellow-700 border border-yellow-300"
                     }`}>
                       {aiAnalysis.routingDecision === "auto_approve" ? "Auto-Approved" :
                        aiAnalysis.routingDecision === "auto_reject" ? "Auto-Rejected" :
@@ -1590,8 +1590,8 @@ function FrameDetailCard({ frame, index }: { frame: any; index: number }) {
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     draft: "bg-muted text-muted-foreground",
-    submitted: "bg-blue-500/15 text-blue-400",
-    ai_screening: "bg-purple-500/15 text-purple-400",
+    submitted: "bg-blue-50 text-blue-600",
+    ai_screening: "bg-purple-50 text-purple-700",
     ai_failed: "bg-red-500/15 text-red-400",
     in_review: "bg-yellow-500/15 text-yellow-400",
     escalated: "bg-orange-500/15 text-orange-400",
@@ -1623,7 +1623,7 @@ function SeverityIcon({ severity }: { severity: string }) {
   if (severity === "critical") return <AlertTriangle className="h-4 w-4 text-red-400" />;
   if (severity === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-400" />;
   if (severity === "safe") return <CircleCheck className="h-4 w-4 text-green-400" />;
-  return <Info className="h-4 w-4 text-blue-400" />;
+  return <Info className="h-4 w-4 text-blue-600" />;
 }
 
 function InfoField({ label, value }: { label: string; value: string }) {
@@ -1951,7 +1951,7 @@ function TranscriptViewer({
                 <span className={`shrink-0 font-mono text-[10px] mt-0.5 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
                   {formatTime(seg.start)}
                 </span>
-                <span className={flagged ? "text-yellow-100" : ""}>{seg.text}</span>
+                <span className={flagged ? "text-yellow-800" : ""}>{seg.text}</span>
               </div>
             );
           })}
@@ -2008,7 +2008,7 @@ function WhisperTranscriptSection({
                 <span className={`shrink-0 font-mono text-[10px] mt-0.5 w-10 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
                   {formatTime(seg.start)}
                 </span>
-                <span className={flagged ? "text-yellow-100" : ""}>{seg.text}</span>
+                <span className={flagged ? "text-yellow-800" : ""}>{seg.text}</span>
               </div>
             );
           })}
@@ -2079,8 +2079,8 @@ function PolicyFindingsSection({ findings }: { findings: RuleFinding[] }) {
             : <CheckCircle className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />;
 
           const frameworkColor = finding.framework === "FCC"
-            ? "text-blue-400 border-blue-500/30"
-            : "text-purple-400 border-purple-500/30";
+            ? "text-blue-600 border-blue-200"
+            : "text-purple-700 border-purple-200";
 
           const severityColor = finding.severity === "blocking"
             ? "text-red-400 border-red-500/30"
@@ -2103,7 +2103,7 @@ function PolicyFindingsSection({ findings }: { findings: RuleFinding[] }) {
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">{finding.description}</p>
                   {finding.recommendation && (
-                    <p className="text-[11px] text-yellow-300/80 mt-1.5 flex items-start gap-1">
+                    <p className="text-[11px] text-yellow-700 mt-1.5 flex items-start gap-1">
                       <span className="shrink-0 mt-0.5">→</span>
                       {finding.recommendation}
                     </p>
@@ -2131,7 +2131,7 @@ function ComplianceCategoryCard({ category }: { category: any }) {
     : category.status === "pass" ? "bg-green-500"
     : category.status === "warning" ? "bg-yellow-500"
     : "bg-red-500";
-  const frameworkColor = category.framework === "FCC" ? "text-blue-400 border-blue-500/30" : "text-purple-400 border-purple-500/30";
+  const frameworkColor = category.framework === "FCC" ? "text-blue-600 border-blue-200" : "text-purple-700 border-purple-200";
 
   return (
     <div className={`rounded-lg border p-3 transition-colors ${expanded && !isSkipped ? statusColor : "border-border/50 bg-background"}`}>

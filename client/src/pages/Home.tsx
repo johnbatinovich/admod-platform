@@ -134,11 +134,11 @@ export default function Home() {
       </div>
 
       {/* Agent Automation Stats */}
-      <Card className="bg-card border-border border-purple-500/20">
+      <Card className="bg-card border-border border-purple-200">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-3">
-            <div className="h-6 w-6 rounded bg-purple-500/15 flex items-center justify-center">
-              <Zap className="h-3.5 w-3.5 text-purple-400" />
+            <div className="h-6 w-6 rounded bg-purple-50 flex items-center justify-center">
+              <Zap className="h-3.5 w-3.5 text-purple-700" />
             </div>
             <span className="text-sm font-semibold">AI Agent — Last 7 Days</span>
             <span className="text-[11px] text-muted-foreground ml-1">automation summary</span>
@@ -223,8 +223,8 @@ export default function Home() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded bg-purple-500/15 flex items-center justify-center">
-                  <Bot className="h-3 w-3 text-purple-400" />
+                <div className="h-5 w-5 rounded bg-purple-50 flex items-center justify-center">
+                  <Bot className="h-3 w-3 text-purple-700" />
                 </div>
                 <CardTitle className="text-sm font-semibold">Agent Activity Feed</CardTitle>
               </div>
@@ -247,8 +247,8 @@ export default function Home() {
                 return (
                   <div key={entry.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                     <div className="flex items-center gap-3">
-                      <div className="h-7 w-7 rounded-md bg-purple-500/10 flex items-center justify-center shrink-0">
-                        <Zap className="h-3.5 w-3.5 text-purple-400" />
+                      <div className="h-7 w-7 rounded-md bg-purple-50 flex items-center justify-center shrink-0">
+                        <Zap className="h-3.5 w-3.5 text-purple-700" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm truncate max-w-[220px]">{entry.adTitle ?? `Ad #${entry.entityId}`}</p>
@@ -361,7 +361,7 @@ function ActionIcon({ action }: { action: string }) {
   if (action.includes("create") || action.includes("submit")) return <FileText className="h-3.5 w-3.5 text-primary" />;
   if (action.includes("review")) return <CheckCircle className="h-3.5 w-3.5 text-success" />;
   if (action.includes("reject")) return <XCircle className="h-3.5 w-3.5 text-destructive" />;
-  if (action.includes("ai")) return <Bot className="h-3.5 w-3.5 text-purple-400" />;
+  if (action.includes("ai")) return <Bot className="h-3.5 w-3.5 text-purple-700" />;
   return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 

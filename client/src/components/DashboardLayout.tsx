@@ -145,7 +145,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
 
   const renderMenuGroup = (label: string, items: typeof mainMenuItems) => (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+      <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-sidebar-foreground/40 font-semibold">
         {label}
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -160,7 +160,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   tooltip={item.label}
                   className="h-9 transition-all font-normal text-[13px]"
                 >
-                  <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                  <item.icon className={`h-4 w-4 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`} />
                   <span>{item.label}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -182,7 +182,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                 className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent rounded-md transition-colors focus:outline-none shrink-0"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4 text-sidebar-foreground/70" />
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
@@ -211,7 +211,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   tooltip="Notifications"
                   className="h-9 text-[13px]"
                 >
-                  <Bell className={`h-4 w-4 ${location === "/notifications" ? "text-primary" : "text-muted-foreground"}`} />
+                  <Bell className={`h-4 w-4 ${location === "/notifications" ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`} />
                   <span>Notifications</span>
                   {(unreadCount ?? 0) > 0 && (
                     <SidebarMenuBadge className="bg-destructive text-destructive-foreground text-[10px] min-w-5 h-5 flex items-center justify-center rounded-full">
@@ -232,7 +232,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <p className="text-[13px] font-medium truncate leading-none">{user?.name || "-"}</p>
-                    <p className="text-[11px] text-muted-foreground truncate mt-1">{user?.email || "-"}</p>
+                    <p className="text-[11px] text-sidebar-foreground/60 truncate mt-1">{user?.email || "-"}</p>
                   </div>
                 </button>
               </DropdownMenuTrigger>

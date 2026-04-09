@@ -27,9 +27,9 @@ export default function Integrations() {
   });
 
   const typeColors: Record<string, string> = {
-    ad_platform: "bg-blue-500/15 text-blue-400",
+    ad_platform: "bg-blue-50 text-blue-600",
     cms: "bg-green-500/15 text-green-400",
-    analytics: "bg-purple-500/15 text-purple-400",
+    analytics: "bg-purple-50 text-purple-700",
     webhook: "bg-orange-500/15 text-orange-400",
     custom: "bg-muted text-muted-foreground",
   };

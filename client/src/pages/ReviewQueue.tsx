@@ -82,7 +82,7 @@ export default function ReviewQueue() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="text-sm font-medium">{ad.title}</p>
-                                <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30 h-4 px-1.5 shrink-0">
+                                <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 h-4 px-1.5 shrink-0">
                                   <Bot className="h-2.5 w-2.5 mr-1" />
                                   AI-Routed
                                 </Badge>

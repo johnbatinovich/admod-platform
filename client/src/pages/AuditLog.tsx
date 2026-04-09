@@ -22,9 +22,9 @@ const humanActionIcons: Record<string, any> = {
 };
 
 function ActionIcon({ action }: { action: string }) {
-  if (isAiAction(action)) return <Bot className="h-4 w-4 text-purple-400" />;
+  if (isAiAction(action)) return <Bot className="h-4 w-4 text-purple-700" />;
   const Icon = humanActionIcons[action] || Settings;
-  return <Icon className="h-4 w-4 text-blue-400" />;
+  return <Icon className="h-4 w-4 text-blue-600" />;
 }
 
 function formatDetails(details: any): string {
@@ -55,14 +55,14 @@ export default function AuditLog() {
         <CardHeader className="pb-3 pt-4 px-4">
           <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <div className="h-5 w-5 rounded bg-purple-500/15 flex items-center justify-center">
-                <Bot className="h-3 w-3 text-purple-400" />
+              <div className="h-5 w-5 rounded bg-purple-50 flex items-center justify-center">
+                <Bot className="h-3 w-3 text-purple-700" />
               </div>
               AI agent action
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="h-5 w-5 rounded bg-blue-500/15 flex items-center justify-center">
-                <User className="h-3 w-3 text-blue-400" />
+              <div className="h-5 w-5 rounded bg-blue-50 flex items-center justify-center">
+                <User className="h-3 w-3 text-blue-600" />
               </div>
               Human action
             </div>
@@ -80,18 +80,18 @@ export default function AuditLog() {
                 const details = log.details as any;
                 return (
                   <div key={log.id} className={`flex items-start gap-3 p-3 hover:bg-accent/30 transition-colors ${ai ? "border-l-2 border-l-purple-500/30" : ""}`}>
-                    <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${ai ? "bg-purple-500/10" : "bg-blue-500/10"}`}>
+                    <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${ai ? "bg-purple-50" : "bg-blue-50"}`}>
                       <ActionIcon action={log.action} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium capitalize">{log.action.replace(/_/g, " ")}</span>
                         {ai ? (
-                          <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30 h-4 px-1.5">
+                          <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 h-4 px-1.5">
                             AI Agent
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/30 h-4 px-1.5">
+                          <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-600 border-blue-200 h-4 px-1.5">
                             Human
                           </Badge>
                         )}
