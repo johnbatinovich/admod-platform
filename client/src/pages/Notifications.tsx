@@ -35,10 +35,10 @@ export default function Notifications() {
   const typeColors: Record<string, string> = {
     ad_submitted: "text-blue-600",
     ai_screening_complete: "text-purple-700",
-    review_completed: "text-green-400",
-    escalation: "text-orange-400",
-    policy_violation: "text-red-400",
-    status_change: "text-yellow-400",
+    review_completed: "text-green-600",
+    escalation: "text-orange-600",
+    policy_violation: "text-red-600",
+    status_change: "text-amber-600",
   };
 
   return (

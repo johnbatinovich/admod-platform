@@ -97,9 +97,9 @@ export default function AuditLog() {
                         )}
                         {details?.routingDecision && (
                           <Badge variant="outline" className={`text-[10px] h-4 px-1.5 ${
-                            details.routingDecision === "auto_approve" ? "bg-green-500/10 text-green-400 border-green-500/30" :
-                            details.routingDecision === "auto_reject" ? "bg-red-500/10 text-red-400 border-red-500/30" :
-                            "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                            details.routingDecision === "auto_approve" ? "bg-green-500/15 text-green-600 border-green-300" :
+                            details.routingDecision === "auto_reject" ? "bg-red-500/15 text-red-600 border-red-300" :
+                            "bg-yellow-500/15 text-amber-600 border-amber-300"
                           }`}>
                             {details.routingDecision.replace(/_/g, " ")}
                           </Badge>

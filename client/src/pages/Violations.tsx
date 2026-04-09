@@ -76,7 +76,7 @@ export default function Violations() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`h-8 w-8 rounded flex items-center justify-center text-xs font-bold ${
-                      (ad.aiScore ?? 0) < 50 ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"
+                      (ad.aiScore ?? 0) < 50 ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600"
                     }`}>
                       {ad.aiScore}
                     </div>

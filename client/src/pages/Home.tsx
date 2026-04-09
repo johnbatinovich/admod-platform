@@ -144,15 +144,15 @@ export default function Home() {
             <span className="text-[11px] text-muted-foreground ml-1">automation summary</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 text-center">
+            <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-center">
               <p className="text-2xl font-bold" style={{ color: "#15803d" }}>{autoStats?.autoApproved ?? 0}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Auto-Approved</p>
             </div>
-            <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 p-3 text-center">
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center">
               <p className="text-2xl font-bold" style={{ color: "#b45309" }}>{autoStats?.flaggedForReview ?? 0}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Flagged for Review</p>
             </div>
-            <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 text-center">
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-center">
               <p className="text-2xl font-bold" style={{ color: "#b91c1c" }}>{autoStats?.autoRejected ?? 0}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: "#374151" }}>Auto-Rejected</p>
             </div>
@@ -241,9 +241,9 @@ export default function Home() {
                 const clearance = d?.clearanceScore as number | undefined;
                 const confidence = d?.routingConfidence as number | undefined;
                 const decisionStyle =
-                  decision === "auto_approve" ? { badge: "bg-green-500/10 text-green-400 border-green-500/30", label: "Auto-Approved" } :
-                  decision === "auto_reject"  ? { badge: "bg-red-500/10 text-red-400 border-red-500/30", label: "Auto-Rejected" } :
-                                                { badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30", label: "Flagged for Review" };
+                  decision === "auto_approve" ? { badge: "bg-green-500/15 text-green-600 border-green-300", label: "Auto-Approved" } :
+                  decision === "auto_reject"  ? { badge: "bg-red-500/15 text-red-600 border-red-300", label: "Auto-Rejected" } :
+                                                { badge: "bg-yellow-500/15 text-amber-600 border-amber-300", label: "Flagged for Review" };
                 return (
                   <div key={entry.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                     <div className="flex items-center gap-3">
@@ -260,7 +260,7 @@ export default function Home() {
                     <div className="flex items-center gap-2 shrink-0">
                       {clearance !== undefined && (
                         <span className={`text-sm font-bold tabular-nums ${
-                          clearance >= 80 ? "text-green-400" : clearance >= 50 ? "text-yellow-400" : "text-red-400"
+                          clearance >= 80 ? "text-green-600" : clearance >= 50 ? "text-amber-600" : "text-red-600"
                         }`}>{clearance}</span>
                       )}
                       {clearance === undefined && confidence !== undefined && (

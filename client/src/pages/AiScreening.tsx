@@ -129,7 +129,7 @@ export default function AiScreening() {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium">{ad.title}</p>
                             {analysis?.isPoliticalAd && (
-                              <Badge className="text-[9px] bg-orange-500/20 text-orange-400 border-orange-500/30 py-0 px-1.5 h-4">
+                              <Badge className="text-[9px] bg-orange-100 text-orange-600 border-orange-300 py-0 px-1.5 h-4">
                                 <Megaphone className="h-2.5 w-2.5 mr-0.5" />Political
                               </Badge>
                             )}
@@ -158,12 +158,12 @@ export default function AiScreening() {
                           </Badge>
                         ))}
                         {objContent.slice(0, 2).map((oc: any, i: number) => (
-                          <Badge key={i} variant="outline" className="text-[9px] border-yellow-500/30 text-yellow-400 py-0 h-4 gap-0.5">
+                          <Badge key={i} variant="outline" className="text-[9px] border-amber-300 text-amber-600 py-0 h-4 gap-0.5">
                             <AlertTriangle className="h-2.5 w-2.5" />{oc.type.replace(/_/g, " ")}
                           </Badge>
                         ))}
                         {blocked.filter((b: any) => b.severity === "legal").length > 0 && (
-                          <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-400 py-0 h-4 gap-0.5">
+                          <Badge variant="outline" className="text-[9px] border-red-300 text-red-600 py-0 h-4 gap-0.5">
                             <Ban className="h-2.5 w-2.5" />{blocked.filter((b: any) => b.severity === "legal").length} legal block{blocked.filter((b: any) => b.severity === "legal").length !== 1 ? "s" : ""}
                           </Badge>
                         )}
@@ -183,7 +183,7 @@ export default function AiScreening() {
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 80 ? "bg-green-500/20 text-green-400" : score >= 50 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400";
+  const color = score >= 80 ? "bg-green-100 text-green-600" : score >= 50 ? "bg-amber-100 text-amber-600" : "bg-red-100 text-red-600";
   return (
     <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-sm font-bold ${color}`}>
       {score}

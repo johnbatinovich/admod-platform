@@ -28,9 +28,9 @@ export default function Integrations() {
 
   const typeColors: Record<string, string> = {
     ad_platform: "bg-blue-50 text-blue-600",
-    cms: "bg-green-500/15 text-green-400",
+    cms: "bg-green-100 text-green-600",
     analytics: "bg-purple-50 text-purple-700",
-    webhook: "bg-orange-500/15 text-orange-400",
+    webhook: "bg-orange-100 text-orange-600",
     custom: "bg-muted text-muted-foreground",
   };
 

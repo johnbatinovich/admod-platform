@@ -29,10 +29,10 @@ export default function BrandSafety() {
   });
 
   const verificationColors: Record<string, string> = {
-    pending: "bg-yellow-500/15 text-yellow-400",
-    verified: "bg-green-500/15 text-green-400",
-    rejected: "bg-red-500/15 text-red-400",
-    suspended: "bg-orange-500/15 text-orange-400",
+    pending: "bg-amber-100 text-amber-600",
+    verified: "bg-green-100 text-green-600",
+    rejected: "bg-red-100 text-red-600",
+    suspended: "bg-orange-100 text-orange-600",
   };
 
   return (
@@ -86,8 +86,8 @@ export default function BrandSafety() {
                         </Badge>
                         {adv.verificationStatus === "pending" && (
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-6 text-[11px] text-green-400" onClick={() => updateAdvertiser.mutate({ id: adv.id, verificationStatus: "verified" })}>Verify</Button>
-                            <Button size="sm" variant="ghost" className="h-6 text-[11px] text-red-400" onClick={() => updateAdvertiser.mutate({ id: adv.id, verificationStatus: "rejected" })}>Reject</Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[11px] text-green-600" onClick={() => updateAdvertiser.mutate({ id: adv.id, verificationStatus: "verified" })}>Verify</Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[11px] text-red-600" onClick={() => updateAdvertiser.mutate({ id: adv.id, verificationStatus: "rejected" })}>Reject</Button>
                           </div>
                         )}
                       </div>

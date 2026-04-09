@@ -36,9 +36,9 @@ export default function Policies() {
 
   const severityColors: Record<string, string> = {
     info: "bg-blue-50 text-blue-600",
-    warning: "bg-yellow-500/15 text-yellow-400",
-    critical: "bg-orange-500/15 text-orange-400",
-    blocking: "bg-red-500/15 text-red-400",
+    warning: "bg-amber-100 text-amber-600",
+    critical: "bg-orange-100 text-orange-600",
+    blocking: "bg-red-100 text-red-600",
   };
 
   const categoryLabels: Record<string, string> = {

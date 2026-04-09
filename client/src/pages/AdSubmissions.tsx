@@ -13,14 +13,14 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   submitted: "bg-blue-50 text-blue-600 border-blue-200",
   ai_screening: "bg-purple-50 text-purple-700 border-purple-200",
-  ai_failed: "bg-red-500/15 text-red-400 border-red-500/30",
-  in_review: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  escalated: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  changes_requested: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  approved: "bg-green-500/15 text-green-400 border-green-500/30",
-  rejected: "bg-red-500/15 text-red-400 border-red-500/30",
-  published: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  archived: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+  ai_failed: "bg-red-100 text-red-600 border-red-300",
+  in_review: "bg-amber-100 text-amber-600 border-amber-300",
+  escalated: "bg-orange-100 text-orange-600 border-orange-300",
+  changes_requested: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  approved: "bg-green-100 text-green-600 border-green-300",
+  rejected: "bg-red-100 text-red-600 border-red-300",
+  published: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  archived: "bg-gray-500/15 text-gray-500 border-gray-500/30",
 };
 
 const formatIcons: Record<string, any> = {
@@ -216,7 +216,7 @@ export default function AdSubmissions() {
                           </div>
                         </td>
                         <td className="p-3">
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-gray-600">
                             {ad.submittedAt ? new Date(ad.submittedAt).toLocaleDateString() : "—"}
                           </span>
                         </td>
@@ -243,22 +243,22 @@ function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
     low: "text-muted-foreground",
     normal: "text-blue-600",
-    high: "text-orange-400",
-    urgent: "text-red-400",
+    high: "text-orange-600",
+    urgent: "text-red-600",
   };
   return <span className={`text-xs font-medium capitalize ${colors[priority] || ""}`}>{priority}</span>;
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 80 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
+  const color = score >= 80 ? "text-green-600" : score >= 50 ? "text-amber-600" : "text-red-600";
   return <span className={`text-xs font-bold ${color}`}>{score}/100</span>;
 }
 
 function RoutingBadge({ decision }: { decision: string }) {
   const styles: Record<string, string> = {
-    auto_approve: "text-green-400",
-    auto_reject: "text-red-400",
-    needs_review: "text-yellow-400",
+    auto_approve: "text-green-600",
+    auto_reject: "text-red-600",
+    needs_review: "text-amber-600",
   };
   const labels: Record<string, string> = {
     auto_approve: "auto approved",

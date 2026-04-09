@@ -65,7 +65,7 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/15 border border-red-200 text-sm text-red-600">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 {error}
               </div>

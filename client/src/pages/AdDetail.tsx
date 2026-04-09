@@ -331,12 +331,12 @@ export default function AdDetail() {
                     </CardContent>
                   </Card>
                 ) : frameAnalysis?.status === "failed" ? (
-                  <Card className="bg-card border-red-500/20">
+                  <Card className="bg-card border-red-200">
                     <CardContent className="p-6">
                       <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+                        <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <h3 className="font-semibold text-red-400 mb-1">Frame Analysis Failed</h3>
+                          <h3 className="font-semibold text-red-600 mb-1">Frame Analysis Failed</h3>
                           <p className="text-sm text-muted-foreground mb-3">
                             {frameAnalysis.summary || "The analysis encountered an error. Check server logs for details."}
                           </p>
@@ -373,13 +373,13 @@ export default function AdDetail() {
                             <p className="text-[11px] text-muted-foreground">Frames Analyzed</p>
                           </div>
                           <div className="p-3 rounded-lg bg-background border border-border/50 text-center">
-                            <p className={`text-2xl font-bold ${(frameAnalysis.overallVideoScore ?? 0) >= 80 ? "text-green-400" : (frameAnalysis.overallVideoScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                            <p className={`text-2xl font-bold ${(frameAnalysis.overallVideoScore ?? 0) >= 80 ? "text-green-600" : (frameAnalysis.overallVideoScore ?? 0) >= 50 ? "text-amber-600" : "text-red-600"}`}>
                               {frameAnalysis.overallVideoScore ?? "—"}
                             </p>
                             <p className="text-[11px] text-muted-foreground">Video Score</p>
                           </div>
                           <div className="p-3 rounded-lg bg-background border border-border/50 text-center">
-                            <p className={`text-2xl font-bold ${frameAnalysis.flaggedFrameCount === 0 ? "text-green-400" : "text-red-400"}`}>
+                            <p className={`text-2xl font-bold ${frameAnalysis.flaggedFrameCount === 0 ? "text-green-600" : "text-red-600"}`}>
                               {frameAnalysis.flaggedFrameCount}
                             </p>
                             <p className="text-[11px] text-muted-foreground">Flagged Frames</p>
@@ -395,10 +395,10 @@ export default function AdDetail() {
                         )}
 
                         {frameAnalysis.worstTimestamp && frameAnalysis.worstIssue && (
-                          <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <div className="mt-3 p-3 rounded-lg bg-red-500/15 border border-red-200">
                             <div className="flex items-center gap-2 mb-1">
-                              <TriangleAlert className="h-4 w-4 text-red-400" />
-                              <span className="text-sm font-semibold text-red-400">Worst Issue at {frameAnalysis.worstTimestamp}</span>
+                              <TriangleAlert className="h-4 w-4 text-red-600" />
+                              <span className="text-sm font-semibold text-red-600">Worst Issue at {frameAnalysis.worstTimestamp}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">{frameAnalysis.worstIssue}</p>
                           </div>
@@ -475,7 +475,7 @@ export default function AdDetail() {
                           {flaggedFrames.length > 0 && (
                             <div className="mt-4">
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                                <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
                                 Flagged Frames ({flaggedFrames.length})
                               </h4>
                               <div className="space-y-2">
@@ -497,7 +497,7 @@ export default function AdDetail() {
                                           <span className="text-sm font-medium">{frame.timestampFormatted}</span>
                                           <Badge variant="outline" className="text-[10px]">{frame.severity}</Badge>
                                         </div>
-                                        <span className={`text-sm font-bold ${frame.score >= 80 ? "text-green-400" : frame.score >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                        <span className={`text-sm font-bold ${frame.score >= 80 ? "text-green-600" : frame.score >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                           {frame.score}/100
                                         </span>
                                       </div>
@@ -507,9 +507,9 @@ export default function AdDetail() {
                                           {frame.issues.map((issue: any, iIdx: number) => (
                                             <Badge key={iIdx} variant="outline" className={`text-[10px] ${
                                               issue.severity === "critical" || issue.severity === "blocking"
-                                                ? "border-red-500/30 text-red-400"
+                                                ? "border-red-300 text-red-600"
                                                 : issue.severity === "warning"
-                                                ? "border-yellow-500/30 text-yellow-400"
+                                                ? "border-amber-300 text-amber-600"
                                                 : "border-blue-200 text-blue-600"
                                             }`}>
                                               {issue.category}
@@ -556,7 +556,7 @@ export default function AdDetail() {
                                     <div className="flex items-center justify-between">
                                       <span className="text-[10px] text-white font-medium">{frame.timestampFormatted}</span>
                                       <span className={`text-[10px] font-bold ${
-                                        frame.score >= 80 ? "text-green-400" : frame.score >= 50 ? "text-yellow-400" : "text-red-400"
+                                        frame.score >= 80 ? "text-green-600" : frame.score >= 50 ? "text-amber-600" : "text-red-600"
                                       }`}>
                                         {frame.score}
                                       </span>
@@ -564,7 +564,7 @@ export default function AdDetail() {
                                   </div>
                                   {(frame.severity === "critical" || frame.severity === "blocking") && (
                                     <div className="absolute top-1 right-1">
-                                      <TriangleAlert className="h-4 w-4 text-red-400 drop-shadow-md" />
+                                      <TriangleAlert className="h-4 w-4 text-red-600 drop-shadow-md" />
                                     </div>
                                   )}
                                 </button>
@@ -625,7 +625,7 @@ export default function AdDetail() {
                                   const past = idx > i;
                                   const active = idx === i;
                                   return (
-                                    <div key={s} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${active ? "border-primary text-primary bg-primary/5" : past ? "border-green-500/50 text-green-400" : "border-border text-muted-foreground"}`}>
+                                    <div key={s} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${active ? "border-primary text-primary bg-primary/5" : past ? "border-green-400 text-green-600" : "border-border text-muted-foreground"}`}>
                                       {past ? <CircleCheck className="h-3 w-3" /> : active ? <Loader2 className="h-3 w-3 animate-spin" /> : <div className="h-3 w-3 rounded-full border border-current opacity-40" />}
                                       {labels[i]}
                                     </div>
@@ -664,9 +664,9 @@ export default function AdDetail() {
                         {/* Big clearance score */}
                         <div className="text-center shrink-0 min-w-[88px]">
                           <p className={`text-7xl font-black leading-none tabular-nums ${
-                            clearanceScore >= 80 ? "text-green-400" :
-                            clearanceScore >= 50 ? "text-yellow-400" :
-                            "text-red-400"
+                            clearanceScore >= 80 ? "text-green-600" :
+                            clearanceScore >= 50 ? "text-amber-600" :
+                            "text-red-600"
                           }`}>{clearanceScore}</p>
                           <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1.5 font-semibold">Clearance</p>
                           {aiAnalysis.runNumber && (
@@ -679,9 +679,9 @@ export default function AdDetail() {
                             {aiAnalysis.routingDecision && (
                               <Badge className={`text-xs px-2.5 py-0.5 ${
                                 aiAnalysis.routingDecision === "auto_approve"
-                                  ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                                  ? "bg-green-100 text-green-600 border border-green-300"
                                   : aiAnalysis.routingDecision === "auto_reject"
-                                  ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                                  ? "bg-red-100 text-red-600 border border-red-300"
                                   : "bg-yellow-50 text-yellow-700 border border-yellow-300"
                               }`}>
                                 <Zap className="h-3 w-3 mr-1" />
@@ -694,7 +694,7 @@ export default function AdDetail() {
                               <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600">Quick scan only</Badge>
                             )}
                             {aiAnalysis.isPoliticalAd && (
-                              <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px]">
+                              <Badge className="bg-orange-100 text-orange-600 border border-orange-300 text-[10px]">
                                 <Megaphone className="h-2.5 w-2.5 mr-1" />Political
                               </Badge>
                             )}
@@ -706,9 +706,9 @@ export default function AdDetail() {
                             <div className="flex items-center gap-1.5">
                               <span className="text-[11px] text-muted-foreground">Confidence</span>
                               <span className={`text-[11px] font-bold ${
-                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 85 ? "text-green-400" :
-                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 60 ? "text-yellow-400" :
-                                "text-red-400"
+                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 85 ? "text-green-600" :
+                                (aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0) >= 60 ? "text-amber-600" :
+                                "text-red-600"
                               }`}>{aiAnalysis.routingConfidence ?? aiAnalysis.confidence ?? 0}%</span>
                             </div>
                             {aiAnalysis.stagesCompleted?.length > 0 && (
@@ -751,14 +751,14 @@ export default function AdDetail() {
                                   Run #{aiAnalysis.previousRuns.length - i}
                                 </span>
                                 <span className={`text-lg font-bold tabular-nums ${
-                                  (run.clearanceScore ?? 0) >= 80 ? "text-green-400" :
-                                  (run.clearanceScore ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"
+                                  (run.clearanceScore ?? 0) >= 80 ? "text-green-600" :
+                                  (run.clearanceScore ?? 0) >= 50 ? "text-amber-600" : "text-red-600"
                                 }`}>{run.clearanceScore ?? "—"}</span>
                                 {run.routingDecision && (
                                   <Badge variant="outline" className={`text-[9px] ${
-                                    run.routingDecision === "auto_approve" ? "border-green-500/30 text-green-400" :
-                                    run.routingDecision === "auto_reject"  ? "border-red-500/30 text-red-400" :
-                                                                             "border-yellow-500/30 text-yellow-400"
+                                    run.routingDecision === "auto_approve" ? "border-green-300 text-green-600" :
+                                    run.routingDecision === "auto_reject"  ? "border-red-300 text-red-600" :
+                                                                             "border-amber-300 text-amber-600"
                                   }`}>
                                     {run.routingDecision === "auto_approve" ? "Approved" :
                                      run.routingDecision === "auto_reject"  ? "Rejected" : "Needs Review"}
@@ -796,12 +796,12 @@ export default function AdDetail() {
                         icon={<Shield className="h-4 w-4" />}
                         badge={
                           aiAnalysis.complianceScores.some((c: any) => c.status === "fail")
-                            ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">Issues found</Badge>
+                            ? <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 ml-2">Issues found</Badge>
                             : aiAnalysis.complianceScores.some((c: any) => c.status === "warning")
-                            ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">Warnings</Badge>
+                            ? <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 ml-2">Warnings</Badge>
                             : aiAnalysis.skippedDeepAnalysis
                             ? <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground ml-2">Not evaluated</Badge>
-                            : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>
+                            : <Badge variant="outline" className="text-[10px] border-green-300 text-green-600 ml-2">All clear</Badge>
                         }
                       >
                         <div className="space-y-4">
@@ -819,7 +819,7 @@ export default function AdDetail() {
                               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
                               {aiAnalysis.overallFccScore != null ? (
                                 <>
-                                  <p className={`text-3xl font-bold ${aiAnalysis.overallFccScore >= 80 ? "text-green-400" : aiAnalysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                  <p className={`text-3xl font-bold ${aiAnalysis.overallFccScore >= 80 ? "text-green-600" : aiAnalysis.overallFccScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                     {aiAnalysis.overallFccScore}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground">/ 100</p>
@@ -835,7 +835,7 @@ export default function AdDetail() {
                               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
                               {aiAnalysis.overallIabScore != null ? (
                                 <>
-                                  <p className={`text-3xl font-bold ${aiAnalysis.overallIabScore >= 80 ? "text-green-400" : aiAnalysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                  <p className={`text-3xl font-bold ${aiAnalysis.overallIabScore >= 80 ? "text-green-600" : aiAnalysis.overallIabScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                     {aiAnalysis.overallIabScore}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground">/ 100</p>
@@ -855,21 +855,21 @@ export default function AdDetail() {
                             </div>
                           )}
                           {aiAnalysis.highestRiskArea && (
-                            <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                            <div className="p-3 rounded-lg bg-red-50 border border-red-200">
                               <div className="flex items-center gap-2 mb-1">
-                                <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                                <label className="text-[11px] uppercase tracking-wider text-red-400 font-semibold">Highest Risk Area</label>
+                                <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
+                                <label className="text-[11px] uppercase tracking-wider text-red-600 font-semibold">Highest Risk Area</label>
                               </div>
                               <p className="text-sm">{aiAnalysis.highestRiskArea}</p>
                             </div>
                           )}
                           {aiAnalysis.requiredActions?.length > 0 && (
-                            <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
-                              <label className="text-[11px] uppercase tracking-wider text-yellow-400 font-semibold">Required Actions Before Airing</label>
+                            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                              <label className="text-[11px] uppercase tracking-wider text-amber-600 font-semibold">Required Actions Before Airing</label>
                               <div className="mt-2 space-y-1.5">
                                 {aiAnalysis.requiredActions.map((action: string, idx: number) => (
                                   <div key={idx} className="flex items-start gap-2">
-                                    <span className="text-yellow-400 text-xs mt-0.5 font-bold">{idx + 1}.</span>
+                                    <span className="text-amber-600 text-xs mt-0.5 font-bold">{idx + 1}.</span>
                                     <p className="text-sm">{action}</p>
                                   </div>
                                 ))}
@@ -911,7 +911,7 @@ export default function AdDetail() {
                         icon={<Film className="h-4 w-4" />}
                         badge={
                           (aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0) > 0
-                            ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount} flagged</Badge>
+                            ? <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 ml-2">{aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount} flagged</Badge>
                             : null
                         }
                       >
@@ -919,9 +919,9 @@ export default function AdDetail() {
                           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                             <div className="rounded-lg border border-border p-3 text-center">
                               <p className={`text-2xl font-bold ${
-                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 80 ? "text-green-400" :
-                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 50 ? "text-yellow-400" :
-                                "text-red-400"
+                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 80 ? "text-green-600" :
+                                (aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? 0) >= 50 ? "text-amber-600" :
+                                "text-red-600"
                               }`}>{aiAnalysis.overallVideoScore ?? frameAnalysis?.overallVideoScore ?? "—"}</p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">Video Score</p>
                             </div>
@@ -930,13 +930,13 @@ export default function AdDetail() {
                               <p className="text-[10px] text-muted-foreground mt-0.5">Frames</p>
                             </div>
                             <div className="rounded-lg border border-border p-3 text-center">
-                              <p className={`text-2xl font-bold ${(aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0) === 0 ? "text-green-400" : "text-red-400"}`}>
+                              <p className={`text-2xl font-bold ${(aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0) === 0 ? "text-green-600" : "text-red-600"}`}>
                                 {aiAnalysis.flaggedFrameCount ?? frameAnalysis?.flaggedFrameCount ?? 0}
                               </p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">Flagged</p>
                             </div>
                             <div className="rounded-lg border border-border p-3 text-center">
-                              <p className="text-lg font-bold text-red-400 leading-tight">
+                              <p className="text-lg font-bold text-red-600 leading-tight">
                                 {aiAnalysis.worstTimestamp ?? frameAnalysis?.worstTimestamp ?? "—"}
                               </p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">Worst Frame</p>
@@ -946,10 +946,10 @@ export default function AdDetail() {
                             <p className="text-sm text-muted-foreground">{aiAnalysis.frameSummary || frameAnalysis?.summary}</p>
                           )}
                           {(aiAnalysis.worstIssue || frameAnalysis?.worstIssue) && (
-                            <div className="p-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
+                            <div className="p-2.5 rounded-lg bg-red-50 border border-red-200">
                               <div className="flex items-center gap-1.5 mb-1">
-                                <TriangleAlert className="h-3.5 w-3.5 text-red-400" />
-                                <span className="text-[11px] text-red-400 font-semibold uppercase tracking-wider">Worst Issue</span>
+                                <TriangleAlert className="h-3.5 w-3.5 text-red-600" />
+                                <span className="text-[11px] text-red-600 font-semibold uppercase tracking-wider">Worst Issue</span>
                               </div>
                               <p className="text-sm">{aiAnalysis.worstIssue || frameAnalysis?.worstIssue}</p>
                             </div>
@@ -995,7 +995,7 @@ export default function AdDetail() {
                       icon={<Zap className="h-4 w-4" />}
                       badge={
                         (aiAnalysis.objectionalContent?.length > 0 || aiAnalysis.flaggableContent?.length > 0)
-                          ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">Flagged items</Badge>
+                          ? <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 ml-2">Flagged items</Badge>
                           : null
                       }
                     >
@@ -1048,10 +1048,10 @@ export default function AdDetail() {
                           </div>
                         )}
                         {aiAnalysis.isPoliticalAd && aiAnalysis.politicalDetails && (
-                          <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
+                          <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
                             <div className="flex items-center gap-1.5 mb-2">
-                              <Megaphone className="h-3.5 w-3.5 text-orange-400" />
-                              <span className="text-[11px] uppercase tracking-wider text-orange-400 font-semibold">Political Ad Detected</span>
+                              <Megaphone className="h-3.5 w-3.5 text-orange-600" />
+                              <span className="text-[11px] uppercase tracking-wider text-orange-600 font-semibold">Political Ad Detected</span>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               {aiAnalysis.politicalDetails.candidate && (
@@ -1072,16 +1072,16 @@ export default function AdDetail() {
                         {aiAnalysis.objectionalContent?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
-                              <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
                               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Regulated Content</span>
                             </div>
                             <div className="space-y-2">
                               {aiAnalysis.objectionalContent.map((item: any, i: number) => (
                                 <div key={i} className={`p-2.5 rounded-lg border ${
-                                  item.severity === "blocking" ? "bg-red-500/5 border-red-500/20" :
-                                  item.severity === "critical" ? "bg-red-500/5 border-red-500/20" :
-                                  item.severity === "warning" ? "bg-yellow-500/5 border-yellow-500/20" :
-                                  "bg-blue-500/5 border-blue-500/20"
+                                  item.severity === "blocking" ? "bg-red-50 border-red-200" :
+                                  item.severity === "critical" ? "bg-red-50 border-red-200" :
+                                  item.severity === "warning" ? "bg-amber-50 border-amber-200" :
+                                  "bg-blue-50 border-blue-200"
                                 }`}>
                                   <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
@@ -1104,17 +1104,17 @@ export default function AdDetail() {
                         {aiAnalysis.flaggableContent?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
-                              <Flag className="h-3.5 w-3.5 text-red-400" />
+                              <Flag className="h-3.5 w-3.5 text-red-600" />
                               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Flaggable Content</span>
                             </div>
                             <div className="space-y-2">
                               {aiAnalysis.flaggableContent.map((item: any, i: number) => (
                                 <div key={i} className={`p-2.5 rounded-lg border ${
                                   item.severity === "blocking" || item.severity === "critical"
-                                    ? "bg-red-500/5 border-red-500/20"
+                                    ? "bg-red-50 border-red-200"
                                     : item.severity === "warning"
-                                    ? "bg-yellow-500/5 border-yellow-500/20"
-                                    : "bg-blue-500/5 border-blue-500/20"
+                                    ? "bg-amber-50 border-amber-200"
+                                    : "bg-blue-50 border-blue-200"
                                 }`}>
                                   <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
@@ -1138,7 +1138,7 @@ export default function AdDetail() {
                           </div>
                         )}
                         {!aiAnalysis.objectionalContent?.length && !aiAnalysis.flaggableContent?.length && (
-                          <div className="flex items-center gap-2 text-sm text-green-400 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                          <div className="flex items-center gap-2 text-sm text-green-600 p-3 rounded-lg bg-green-50 border border-green-200">
                             <CircleCheck className="h-4 w-4" />
                             No objectionable or flaggable content detected.
                           </div>
@@ -1151,12 +1151,12 @@ export default function AdDetail() {
                             </h4>
                             {aiAnalysis.audienceDemographics.recommended?.length > 0 && (
                               <div>
-                                <h5 className="text-xs font-semibold uppercase tracking-wider text-green-400 mb-2 flex items-center gap-1.5">
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-green-600 mb-2 flex items-center gap-1.5">
                                   <CheckCircle className="h-3.5 w-3.5" />Recommended Audiences
                                 </h5>
                                 <div className="space-y-2">
                                   {aiAnalysis.audienceDemographics.recommended.map((seg: any, i: number) => (
-                                    <div key={i} className="p-2.5 rounded-lg bg-green-500/5 border border-green-500/20">
+                                    <div key={i} className="p-2.5 rounded-lg bg-green-50 border border-green-200">
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1">
                                           <p className="text-sm font-medium">{seg.segment}</p>
@@ -1165,7 +1165,7 @@ export default function AdDetail() {
                                         {seg.geographies?.length > 0 && (
                                           <div className="flex flex-wrap gap-1 shrink-0 max-w-[160px]">
                                             {seg.geographies.slice(0, 3).map((geo: string, gi: number) => (
-                                              <Badge key={gi} variant="outline" className="text-[9px] border-green-500/30 text-green-400">
+                                              <Badge key={gi} variant="outline" className="text-[9px] border-green-300 text-green-600">
                                                 <Globe className="h-2.5 w-2.5 mr-0.5" />{geo}
                                               </Badge>
                                             ))}
@@ -1187,7 +1187,7 @@ export default function AdDetail() {
                                 </h5>
                                 <div className="grid grid-cols-2 gap-2">
                                   {aiAnalysis.audienceDemographics.lookalikAdvertisers.map((adv: any, i: number) => (
-                                    <div key={i} className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                                    <div key={i} className="p-2.5 rounded-lg bg-blue-50 border border-blue-200">
                                       <p className="text-sm font-medium">{adv.name}</p>
                                       <p className="text-[10px] text-muted-foreground">{adv.industry}</p>
                                       <p className="text-[11px] text-muted-foreground mt-1">{adv.similarity}</p>
@@ -1198,27 +1198,27 @@ export default function AdDetail() {
                             )}
                             {aiAnalysis.audienceDemographics.blockedAudiences?.length > 0 && (
                               <div>
-                                <h5 className="text-xs font-semibold uppercase tracking-wider text-red-400 mb-2 flex items-center gap-1.5">
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2 flex items-center gap-1.5">
                                   <Ban className="h-3.5 w-3.5" />Must Not Reach
                                 </h5>
                                 <div className="space-y-2">
                                   {aiAnalysis.audienceDemographics.blockedAudiences.map((block: any, i: number) => (
                                     <div key={i} className={`p-2.5 rounded-lg border ${
-                                      block.severity === "legal" ? "bg-red-500/5 border-red-500/30" :
-                                      block.severity === "required" ? "bg-red-500/5 border-red-500/20" :
-                                      "bg-yellow-500/5 border-yellow-500/20"
+                                      block.severity === "legal" ? "bg-red-50 border-red-300" :
+                                      block.severity === "required" ? "bg-red-50 border-red-200" :
+                                      "bg-amber-50 border-amber-200"
                                     }`}>
                                       <div className="flex items-start justify-between gap-2 mb-1">
                                         <div className="flex items-center gap-1.5">
                                           <Ban className={`h-3.5 w-3.5 shrink-0 ${
-                                            block.severity === "legal" || block.severity === "required" ? "text-red-400" : "text-yellow-400"
+                                            block.severity === "legal" || block.severity === "required" ? "text-red-600" : "text-amber-600"
                                           }`} />
                                           <p className="text-sm font-medium">{block.segment}</p>
                                         </div>
                                         <Badge variant="outline" className={`text-[9px] shrink-0 ${
-                                          block.severity === "legal" ? "border-red-500/40 text-red-400" :
-                                          block.severity === "required" ? "border-red-500/30 text-red-300" :
-                                          "border-yellow-500/30 text-yellow-400"
+                                          block.severity === "legal" ? "border-red-400 text-red-600" :
+                                          block.severity === "required" ? "border-red-300 text-red-600" :
+                                          "border-amber-300 text-amber-600"
                                         }`}>{block.severity}</Badge>
                                       </div>
                                       <p className="text-xs text-muted-foreground">{block.reason}</p>
@@ -1242,7 +1242,7 @@ export default function AdDetail() {
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   <span className="text-muted-foreground">Flagged phrases:</span>
                                   {aiAnalysis.details.textAnalysis.flaggedPhrases.map((p: string, i: number) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400">{p}</Badge>
+                                    <Badge key={i} variant="outline" className="text-[10px] border-amber-300 text-amber-600">{p}</Badge>
                                   ))}
                                 </div>
                               )}
@@ -1344,8 +1344,8 @@ export default function AdDetail() {
                       {ad.approvalSteps.map((step: any) => (
                         <div key={step.id} className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border/50">
                           <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                            step.status === "approved" ? "bg-green-500/20 text-green-400" :
-                            step.status === "rejected" ? "bg-red-500/20 text-red-400" :
+                            step.status === "approved" ? "bg-green-100 text-green-600" :
+                            step.status === "rejected" ? "bg-red-100 text-red-600" :
                             "bg-muted text-muted-foreground"
                           }`}>
                             {step.stepNumber}
@@ -1377,18 +1377,18 @@ export default function AdDetail() {
               <CardContent className="p-4 text-center">
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Clearance Score</p>
                 <p className={`text-6xl font-black leading-none tabular-nums ${
-                  clearanceScore >= 80 ? "text-green-400" :
-                  clearanceScore >= 50 ? "text-yellow-400" :
-                  "text-red-400"
+                  clearanceScore >= 80 ? "text-green-600" :
+                  clearanceScore >= 50 ? "text-amber-600" :
+                  "text-red-600"
                 }`}>{clearanceScore}</p>
                 <p className="text-[11px] text-muted-foreground mt-1">/ 100</p>
                 {aiAnalysis.routingDecision && (
                   <div className="mt-3">
                     <Badge className={`text-xs ${
                       aiAnalysis.routingDecision === "auto_approve"
-                        ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                        ? "bg-green-100 text-green-600 border border-green-300"
                         : aiAnalysis.routingDecision === "auto_reject"
-                        ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                        ? "bg-red-100 text-red-600 border border-red-300"
                         : "bg-yellow-50 text-yellow-700 border border-yellow-300"
                     }`}>
                       {aiAnalysis.routingDecision === "auto_approve" ? "Auto-Approved" :
@@ -1433,8 +1433,8 @@ export default function AdDetail() {
                       return (
                         <div key={step.id} className="flex items-start gap-2.5">
                           <div className={`mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                            step.status === "approved" ? "bg-green-500/20 text-green-400" :
-                            step.status === "rejected" ? "bg-red-500/20 text-red-400" :
+                            step.status === "approved" ? "bg-green-100 text-green-600" :
+                            step.status === "rejected" ? "bg-red-100 text-red-600" :
                             isActive ? "bg-primary/20 text-primary ring-1 ring-primary/40" :
                             "bg-muted text-muted-foreground"
                           }`}>
@@ -1491,7 +1491,7 @@ export default function AdDetail() {
                 <Button size="sm" variant="outline" onClick={() => handleReview("request_changes")} disabled={submitReview.isPending}>
                   <MessageSquare className="h-3.5 w-3.5 mr-1" />Changes
                 </Button>
-                <Button size="sm" variant="outline" className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10" onClick={() => handleReview("escalate")} disabled={submitReview.isPending}>
+                <Button size="sm" variant="outline" className="border-orange-400 text-orange-600 hover:bg-orange-500/15" onClick={() => handleReview("escalate")} disabled={submitReview.isPending}>
                   <AlertTriangle className="h-3.5 w-3.5 mr-1" />Escalate
                 </Button>
               </div>
@@ -1533,7 +1533,7 @@ function FrameDetailCard({ frame, index }: { frame: any; index: number }) {
           <h4 className="font-semibold text-sm">Frame at {frame.timestampFormatted}</h4>
           <Badge variant="outline" className="text-[10px]">{frame.severity}</Badge>
         </div>
-        <span className={`text-lg font-bold ${frame.score >= 80 ? "text-green-400" : frame.score >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+        <span className={`text-lg font-bold ${frame.score >= 80 ? "text-green-600" : frame.score >= 50 ? "text-amber-600" : "text-red-600"}`}>
           {frame.score}/100
         </span>
       </div>
@@ -1554,10 +1554,10 @@ function FrameDetailCard({ frame, index }: { frame: any; index: number }) {
           {frame.issues.map((issue: any, idx: number) => (
             <div key={idx} className={`p-2.5 rounded-lg border ${
               issue.severity === "critical" || issue.severity === "blocking"
-                ? "bg-red-500/5 border-red-500/20"
+                ? "bg-red-50 border-red-200"
                 : issue.severity === "warning"
-                ? "bg-yellow-500/5 border-yellow-500/20"
-                : "bg-blue-500/5 border-blue-500/20"
+                ? "bg-amber-50 border-amber-200"
+                : "bg-blue-50 border-blue-200"
             }`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
@@ -1576,7 +1576,7 @@ function FrameDetailCard({ frame, index }: { frame: any; index: number }) {
       )}
 
       {frame.issues?.length === 0 && (
-        <div className="flex items-center gap-2 text-sm text-green-400">
+        <div className="flex items-center gap-2 text-sm text-green-600">
           <CircleCheck className="h-4 w-4" />
           No issues detected in this frame
         </div>
@@ -1592,17 +1592,17 @@ function StatusBadge({ status }: { status: string }) {
     draft: "bg-muted text-muted-foreground",
     submitted: "bg-blue-50 text-blue-600",
     ai_screening: "bg-purple-50 text-purple-700",
-    ai_failed: "bg-red-500/15 text-red-400",
-    in_review: "bg-yellow-500/15 text-yellow-400",
-    escalated: "bg-orange-500/15 text-orange-400",
-    approved: "bg-green-500/15 text-green-400",
-    rejected: "bg-red-500/15 text-red-400",
+    ai_failed: "bg-red-100 text-red-600",
+    in_review: "bg-amber-100 text-amber-600",
+    escalated: "bg-orange-100 text-orange-600",
+    approved: "bg-green-100 text-green-600",
+    rejected: "bg-red-100 text-red-600",
   };
   return <Badge variant="outline" className={`text-[11px] ${colors[status] || ""}`}>{status.replace(/_/g, " ")}</Badge>;
 }
 
 function ScoreCard({ label, score }: { label: string; score: number }) {
-  const color = score >= 80 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
+  const color = score >= 80 ? "text-green-600" : score >= 50 ? "text-amber-600" : "text-red-600";
   return (
     <div className="p-3 rounded-lg bg-background border border-border/50 text-center">
       <p className={`text-2xl font-bold ${color}`}>{score}</p>
@@ -1612,17 +1612,17 @@ function ScoreCard({ label, score }: { label: string; score: number }) {
 }
 
 function DecisionIcon({ decision }: { decision: string }) {
-  if (decision === "approve") return <CheckCircle className="h-4 w-4 text-green-400" />;
-  if (decision === "reject") return <XCircle className="h-4 w-4 text-red-400" />;
-  if (decision === "escalate") return <AlertTriangle className="h-4 w-4 text-orange-400" />;
-  return <MessageSquare className="h-4 w-4 text-yellow-400" />;
+  if (decision === "approve") return <CheckCircle className="h-4 w-4 text-green-600" />;
+  if (decision === "reject") return <XCircle className="h-4 w-4 text-red-600" />;
+  if (decision === "escalate") return <AlertTriangle className="h-4 w-4 text-orange-600" />;
+  return <MessageSquare className="h-4 w-4 text-amber-600" />;
 }
 
 function SeverityIcon({ severity }: { severity: string }) {
-  if (severity === "blocking") return <XCircle className="h-4 w-4 text-red-400" />;
-  if (severity === "critical") return <AlertTriangle className="h-4 w-4 text-red-400" />;
-  if (severity === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-400" />;
-  if (severity === "safe") return <CircleCheck className="h-4 w-4 text-green-400" />;
+  if (severity === "blocking") return <XCircle className="h-4 w-4 text-red-600" />;
+  if (severity === "critical") return <AlertTriangle className="h-4 w-4 text-red-600" />;
+  if (severity === "warning") return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+  if (severity === "safe") return <CircleCheck className="h-4 w-4 text-green-600" />;
   return <Info className="h-4 w-4 text-blue-600" />;
 }
 
@@ -1734,10 +1734,10 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
       defaultOpen={blockingCount > 0 || criticalCount > 0}
       badge={
         blockingCount > 0 || criticalCount > 0
-          ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{blockingCount + criticalCount} critical</Badge>
+          ? <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 ml-2">{blockingCount + criticalCount} critical</Badge>
           : warningCount > 0
-          ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">{warningCount} warning{warningCount !== 1 ? "s" : ""}</Badge>
-          : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>
+          ? <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 ml-2">{warningCount} warning{warningCount !== 1 ? "s" : ""}</Badge>
+          : <Badge variant="outline" className="text-[10px] border-green-300 text-green-600 ml-2">All clear</Badge>
       }
     >
       <div className="space-y-4">
@@ -1746,16 +1746,16 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
           <div className="rounded-lg border border-border p-4 text-center">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">FCC Compliance</p>
             <p className={`text-3xl font-bold ${
-              analysis.overallFccScore >= 80 ? "text-green-400" :
-              analysis.overallFccScore >= 50 ? "text-yellow-400" : "text-red-400"
+              analysis.overallFccScore >= 80 ? "text-green-600" :
+              analysis.overallFccScore >= 50 ? "text-amber-600" : "text-red-600"
             }`}>{analysis.overallFccScore}</p>
             <p className="text-[10px] text-muted-foreground">/ 100 · Gemini</p>
           </div>
           <div className="rounded-lg border border-border p-4 text-center">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">IAB Compliance</p>
             <p className={`text-3xl font-bold ${
-              analysis.overallIabScore >= 80 ? "text-green-400" :
-              analysis.overallIabScore >= 50 ? "text-yellow-400" : "text-red-400"
+              analysis.overallIabScore >= 80 ? "text-green-600" :
+              analysis.overallIabScore >= 50 ? "text-amber-600" : "text-red-600"
             }`}>{analysis.overallIabScore}</p>
             <p className="text-[10px] text-muted-foreground">/ 100 · Gemini</p>
           </div>
@@ -1771,10 +1771,10 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
 
         {/* Audio violations */}
         {analysis.audioViolations?.length > 0 && (
-          <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
             <div className="flex items-center gap-2 mb-2">
-              <Music className="h-3.5 w-3.5 text-yellow-400" />
-              <p className="text-[11px] uppercase tracking-wider text-yellow-400 font-semibold">Audio Violations</p>
+              <Music className="h-3.5 w-3.5 text-amber-600" />
+              <p className="text-[11px] uppercase tracking-wider text-amber-600 font-semibold">Audio Violations</p>
             </div>
             <div className="space-y-1">
               {analysis.audioViolations.map((v: string, i: number) => (
@@ -1786,12 +1786,12 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
 
         {/* Required actions */}
         {analysis.requiredActions?.length > 0 && (
-          <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-            <p className="text-[11px] uppercase tracking-wider text-red-400 font-semibold mb-2">Required Actions Before Airing</p>
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+            <p className="text-[11px] uppercase tracking-wider text-red-600 font-semibold mb-2">Required Actions Before Airing</p>
             <div className="space-y-1.5">
               {analysis.requiredActions.map((action: string, i: number) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="text-red-400 text-xs font-bold mt-0.5">{i + 1}.</span>
+                  <span className="text-red-600 text-xs font-bold mt-0.5">{i + 1}.</span>
                   <p className="text-sm">{action}</p>
                 </div>
               ))}
@@ -1809,10 +1809,10 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
             <div className="space-y-2">
               {findings.map((finding: any, i: number) => (
                 <div key={i} className={`p-3 rounded-lg border ${
-                  finding.severity === "blocking" ? "bg-red-500/5 border-red-500/30" :
-                  finding.severity === "critical" ? "bg-red-500/5 border-red-500/20" :
-                  finding.severity === "warning"  ? "bg-yellow-500/5 border-yellow-500/20" :
-                                                    "bg-blue-500/5 border-blue-500/20"
+                  finding.severity === "blocking" ? "bg-red-50 border-red-300" :
+                  finding.severity === "critical" ? "bg-red-50 border-red-200" :
+                  finding.severity === "warning"  ? "bg-amber-50 border-amber-200" :
+                                                    "bg-blue-50 border-blue-200"
                 }`}>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1839,7 +1839,7 @@ function GeminiSection({ analysis, isRunning, onRun, isPending }: {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-green-400 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+          <div className="flex items-center gap-2 text-sm text-green-600 p-3 rounded-lg bg-green-50 border border-green-200">
             <CircleCheck className="h-4 w-4" />
             No compliance violations detected by Gemini.
           </div>
@@ -1929,7 +1929,7 @@ function TranscriptViewer({
             {transcript.segments.length} segments · {formatTime(transcript.durationSeconds)}
           </Badge>
           {findings.some((f) => f.timestampSeconds != null) && (
-            <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-yellow-400">
+            <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">
               violations highlighted
             </Badge>
           )}
@@ -1945,10 +1945,10 @@ function TranscriptViewer({
               <div
                 key={i}
                 className={`flex gap-2.5 rounded px-2 py-1 text-xs leading-relaxed ${
-                  flagged ? "bg-yellow-500/10 border border-yellow-500/25" : "hover:bg-muted/40"
+                  flagged ? "bg-amber-100 border border-amber-300" : "hover:bg-muted/40"
                 }`}
               >
-                <span className={`shrink-0 font-mono text-[10px] mt-0.5 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
+                <span className={`shrink-0 font-mono text-[10px] mt-0.5 ${flagged ? "text-amber-600" : "text-muted-foreground"}`}>
                   {formatTime(seg.start)}
                 </span>
                 <span className={flagged ? "text-yellow-800" : ""}>{seg.text}</span>
@@ -2002,10 +2002,10 @@ function WhisperTranscriptSection({
               <div
                 key={i}
                 className={`flex gap-2.5 rounded px-2 py-1 text-xs leading-relaxed ${
-                  flagged ? "bg-yellow-500/10 border border-yellow-500/25" : "hover:bg-muted/40"
+                  flagged ? "bg-amber-100 border border-amber-300" : "hover:bg-muted/40"
                 }`}
               >
-                <span className={`shrink-0 font-mono text-[10px] mt-0.5 w-10 ${flagged ? "text-yellow-400" : "text-muted-foreground"}`}>
+                <span className={`shrink-0 font-mono text-[10px] mt-0.5 w-10 ${flagged ? "text-amber-600" : "text-muted-foreground"}`}>
                   {formatTime(seg.start)}
                 </span>
                 <span className={flagged ? "text-yellow-800" : ""}>{seg.text}</span>
@@ -2015,7 +2015,7 @@ function WhisperTranscriptSection({
         </div>
         {findings.some((f) => f.timestampSeconds != null) && (
           <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-500/40 border border-yellow-500/50" />
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-200 border border-amber-400" />
             Highlighted segments overlap with Gemini violation timestamps
           </p>
         )}
@@ -2044,10 +2044,10 @@ function PolicyFindingsSection({ findings }: { findings: RuleFinding[] }) {
   const passes = findings.filter(f => f.status === "pass");
 
   const badge = fails.length > 0
-    ? <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 ml-2">{fails.length} violation{fails.length !== 1 ? "s" : ""}</Badge>
+    ? <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 ml-2">{fails.length} violation{fails.length !== 1 ? "s" : ""}</Badge>
     : warnings.length > 0
-    ? <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-2">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>
-    : <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-400 ml-2">All clear</Badge>;
+    ? <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 ml-2">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>
+    : <Badge variant="outline" className="text-[10px] border-green-300 text-green-600 ml-2">All clear</Badge>;
 
   return (
     <AiAccordion
@@ -2067,26 +2067,26 @@ function PolicyFindingsSection({ findings }: { findings: RuleFinding[] }) {
           const isPass = finding.status === "pass";
 
           const rowColor = isFail
-            ? "border-red-500/25 bg-red-500/5"
+            ? "border-red-200 bg-red-50"
             : isWarn
-            ? "border-yellow-500/25 bg-yellow-500/5"
+            ? "border-amber-200 bg-amber-50"
             : "border-border/40 bg-background";
 
           const statusIcon = isFail
-            ? <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+            ? <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
             : isWarn
-            ? <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0 mt-0.5" />
-            : <CheckCircle className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />;
+            ? <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+            : <CheckCircle className="h-3.5 w-3.5 text-green-600 shrink-0 mt-0.5" />;
 
           const frameworkColor = finding.framework === "FCC"
             ? "text-blue-600 border-blue-200"
             : "text-purple-700 border-purple-200";
 
           const severityColor = finding.severity === "blocking"
-            ? "text-red-400 border-red-500/30"
+            ? "text-red-600 border-red-300"
             : finding.severity === "critical"
-            ? "text-orange-400 border-orange-500/30"
-            : "text-yellow-400 border-yellow-500/30";
+            ? "text-orange-600 border-orange-300"
+            : "text-amber-600 border-amber-300";
 
           return (
             <div key={finding.ruleId} className={`rounded-lg border p-3 ${rowColor}`}>
@@ -2124,9 +2124,9 @@ function ComplianceCategoryCard({ category }: { category: any }) {
   const [expanded, setExpanded] = useState(false);
   const isSkipped = category.status === "skipped";
   const statusColor = isSkipped ? "text-muted-foreground border-border bg-muted/20"
-    : category.status === "pass" ? "text-green-400 border-green-500/20 bg-green-500/5"
-    : category.status === "warning" ? "text-yellow-400 border-yellow-500/20 bg-yellow-500/5"
-    : "text-red-400 border-red-500/20 bg-red-500/5";
+    : category.status === "pass" ? "text-green-600 border-green-200 bg-green-50"
+    : category.status === "warning" ? "text-amber-600 border-amber-200 bg-amber-50"
+    : "text-red-600 border-red-200 bg-red-50";
   const barColor = isSkipped ? "bg-muted-foreground/30"
     : category.status === "pass" ? "bg-green-500"
     : category.status === "warning" ? "bg-yellow-500"
@@ -2147,12 +2147,12 @@ function ComplianceCategoryCard({ category }: { category: any }) {
             ) : (
               <>
                 <Badge variant="outline" className={`text-[10px] capitalize ${
-                  category.status === "pass" ? "border-green-500/30 text-green-400" :
-                  category.status === "warning" ? "border-yellow-500/30 text-yellow-400" :
-                  "border-red-500/30 text-red-400"
+                  category.status === "pass" ? "border-green-300 text-green-600" :
+                  category.status === "warning" ? "border-amber-300 text-amber-600" :
+                  "border-red-300 text-red-600"
                 }`}>{category.status}</Badge>
                 <span className={`text-lg font-bold ${
-                  category.score >= 80 ? "text-green-400" : category.score >= 50 ? "text-yellow-400" : "text-red-400"
+                  category.score >= 80 ? "text-green-600" : category.score >= 50 ? "text-amber-600" : "text-red-600"
                 }`}>{category.score}</span>
               </>
             )}
@@ -2168,10 +2168,10 @@ function ComplianceCategoryCard({ category }: { category: any }) {
           {category.findings.map((finding: any, idx: number) => (
             <div key={idx} className={`p-2.5 rounded-lg border ${
               finding.severity === "blocking" || finding.severity === "critical"
-                ? "bg-red-500/5 border-red-500/15"
+                ? "bg-red-50 border-red-200"
                 : finding.severity === "warning"
-                ? "bg-yellow-500/5 border-yellow-500/15"
-                : "bg-blue-500/5 border-blue-500/15"
+                ? "bg-amber-50 border-amber-200"
+                : "bg-blue-50 border-blue-200"
             }`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
@@ -2195,7 +2195,7 @@ function ComplianceCategoryCard({ category }: { category: any }) {
       )}
 
       {expanded && (!category.findings || category.findings.length === 0) && (
-        <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-sm text-green-400">
+        <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-sm text-green-600">
           <CircleCheck className="h-4 w-4" />
           No findings — fully compliant
         </div>

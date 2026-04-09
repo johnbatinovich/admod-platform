@@ -35,8 +35,8 @@ export default function ReviewQueue() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={Clock} label="Pending" value={totalPending} color="text-yellow-400" />
-        <StatCard icon={AlertTriangle} label="Escalated" value={queues.escalated.length} color="text-orange-400" />
+        <StatCard icon={Clock} label="Pending" value={totalPending} color="text-amber-600" />
+        <StatCard icon={AlertTriangle} label="Escalated" value={queues.escalated.length} color="text-orange-600" />
         <StatCard icon={Shield} label="Reviews Today" value={reviewStats?.today ?? 0} color="text-primary" />
         <StatCard icon={FileText} label="Total Reviews" value={reviewStats?.total ?? 0} color="text-muted-foreground" />
       </div>
@@ -109,7 +109,7 @@ export default function ReviewQueue() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {ad.aiScore !== null && (
-                              <span className={`text-xs font-bold ${ad.aiScore >= 80 ? "text-green-400" : ad.aiScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                              <span className={`text-xs font-bold ${ad.aiScore >= 80 ? "text-green-600" : ad.aiScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                 {ad.aiScore}
                               </span>
                             )}
@@ -163,7 +163,7 @@ export default function ReviewQueue() {
                           </div>
                           <div className="flex items-center gap-2">
                             {ad.aiScore !== null && (
-                              <span className={`text-xs font-bold ${ad.aiScore >= 80 ? "text-green-400" : ad.aiScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                              <span className={`text-xs font-bold ${ad.aiScore >= 80 ? "text-green-600" : ad.aiScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
                                 {ad.aiScore}
                               </span>
                             )}
